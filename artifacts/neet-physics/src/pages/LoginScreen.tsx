@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Zap, User, BookOpen, Lock, Phone, ArrowLeft, AlertCircle } from "lucide-react";
+import { User, BookOpen, Lock, Phone, ArrowLeft, AlertCircle } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
 
@@ -55,9 +55,7 @@ export default function LoginScreen() {
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6">
       {/* Logo */}
       <div className="flex items-center gap-3 mb-10">
-        <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center shadow-lg shadow-primary/30">
-          <Zap className="w-5 h-5 text-primary-foreground" />
-        </div>
+        <img src="/logo.png" alt="EMC Logo" className="w-12 h-12 rounded-xl object-contain" />
         <div>
           <h1 className="text-xl font-bold text-foreground tracking-wide">EMC</h1>
           <p className="text-xs text-muted-foreground">Physics NEET Prep</p>

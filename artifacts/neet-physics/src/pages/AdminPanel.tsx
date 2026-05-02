@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Users, TrendingUp, ClipboardList, Target, ChevronDown, ChevronUp, LogOut, Phone, Award, AlertTriangle } from "lucide-react";
+import { Users, TrendingUp, ClipboardList, ChevronDown, ChevronUp, LogOut, Phone } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
 
@@ -82,9 +82,8 @@ export default function AdminPanel() {
       {/* Top bar */}
       <header className="border-b border-border bg-card/60 backdrop-blur px-6 py-3 flex items-center justify-between sticky top-0 z-10">
         <div className="flex items-center gap-3">
-          <div className="w-7 h-7 rounded-md bg-primary flex items-center justify-center">
-            <Target className="w-4 h-4 text-primary-foreground" />
-          </div>
+          <img src="/logo.png" alt="EMC Logo" className="w-7 h-7 rounded-md object-contain" />
+
           <div>
             <span className="text-sm font-bold text-foreground">EMC Admin Panel</span>
             <span className="ml-2 text-xs bg-primary/15 text-primary border border-primary/20 px-1.5 py-0.5 rounded font-semibold">TEACHER</span>

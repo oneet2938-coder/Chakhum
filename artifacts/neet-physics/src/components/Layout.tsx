@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { BookOpen, LayoutDashboard, FlaskConical, ClipboardList, Zap, LogOut } from "lucide-react";
+import { BookOpen, LayoutDashboard, FlaskConical, ClipboardList, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
 
@@ -19,9 +19,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <aside className="w-56 shrink-0 border-r border-sidebar-border bg-sidebar flex flex-col">
         {/* Logo */}
         <div className="px-5 py-4 border-b border-sidebar-border flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-md bg-primary flex items-center justify-center">
-            <Zap className="w-4 h-4 text-primary-foreground" />
-          </div>
+          <img src="/logo.png" alt="EMC Logo" className="w-7 h-7 rounded-md object-contain" />
           <div>
             <div className="text-sm font-bold text-foreground tracking-wide">EMC</div>
             <div className="text-[10px] text-muted-foreground leading-none">Physics NEET Prep</div>
