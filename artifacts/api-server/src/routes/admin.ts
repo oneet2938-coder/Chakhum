@@ -48,40 +48,51 @@ router.get("/admin/daily-report", async (_req, res) => {
     .from(studentsTable)
     .orderBy(studentsTable.createdAt);
 
-  // Questions from mock tests today
-  const testActivity = await db
+  // Fetch every (studentId, questionId) answered in practice today — raw rows, dedup in JS
+  const practiceToday = await db
+    .select({
+      studentId: practiceAnswersTable.studentId,
+      questionId: practiceAnswersTable.questionId,
+    })
+    .from(practiceAnswersTable)
+    .where(
+      sql`DATE(${practiceAnswersTable.answeredAt} AT TIME ZONE 'UTC') = CURRENT_DATE
+          AND ${practiceAnswersTable.studentId} IS NOT NULL`
+    );
+
+  // Same for test attempt answers today
+  const testsToday = await db
     .select({
       studentId: attemptsTable.studentId,
-      count: sql<number>`count(${attemptAnswersTable.id})::int`,
+      questionId: attemptAnswersTable.questionId,
     })
     .from(attemptAnswersTable)
     .innerJoin(attemptsTable, eq(attemptAnswersTable.attemptId, attemptsTable.id))
     .where(
       sql`DATE(${attemptsTable.completedAt} AT TIME ZONE 'UTC') = CURRENT_DATE
           AND ${attemptsTable.studentId} IS NOT NULL`
-    )
-    .groupBy(attemptsTable.studentId);
+    );
 
-  // Questions from practice section today
-  const practiceActivity = await db
-    .select({
-      studentId: practiceAnswersTable.studentId,
-      count: sql<number>`count(*)::int`,
-    })
-    .from(practiceAnswersTable)
-    .where(
-      sql`DATE(${practiceAnswersTable.answeredAt} AT TIME ZONE 'UTC') = CURRENT_DATE
-          AND ${practiceAnswersTable.studentId} IS NOT NULL`
-    )
-    .groupBy(practiceAnswersTable.studentId);
+  // Build per-student Sets so each question only counts once even if done in both practice + test
+  const practiceQs: Record<number, Set<number>> = {};
+  const testQs: Record<number, Set<number>> = {};
+  const allQs: Record<number, Set<number>> = {};
 
-  const testMap = Object.fromEntries(testActivity.map((a) => [a.studentId!, a.count]));
-  const practiceMap = Object.fromEntries(practiceActivity.map((a) => [a.studentId!, a.count]));
+  for (const r of practiceToday) {
+    const id = r.studentId!;
+    (practiceQs[id] ??= new Set()).add(r.questionId);
+    (allQs[id] ??= new Set()).add(r.questionId);
+  }
+  for (const r of testsToday) {
+    const id = r.studentId!;
+    (testQs[id] ??= new Set()).add(r.questionId);
+    (allQs[id] ??= new Set()).add(r.questionId);
+  }
 
   const report = students.map((s) => {
-    const fromTests = testMap[s.id] ?? 0;
-    const fromPractice = practiceMap[s.id] ?? 0;
-    const questionsToday = fromTests + fromPractice;
+    const fromPractice = (practiceQs[s.id] ?? new Set()).size;
+    const fromTests    = (testQs[s.id]    ?? new Set()).size;
+    const questionsToday = (allQs[s.id]   ?? new Set()).size; // true distinct union
     const completed = questionsToday >= target;
     return {
       id: s.id,

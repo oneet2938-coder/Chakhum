@@ -11,53 +11,43 @@ async function getDailyTarget(): Promise<number> {
 }
 
 async function getStudentStats(studentId: number, target: number) {
-  // Total questions from practice answers
-  const [pCount] = await db
-    .select({ count: sql<number>`count(*)::int` })
+  // Fetch every (day, questionId) pair from practice — no aggregation so we can deduplicate in JS
+  const practiceRows = await db
+    .select({
+      day: sql<string>`DATE(${practiceAnswersTable.answeredAt} AT TIME ZONE 'UTC')::text`,
+      questionId: practiceAnswersTable.questionId,
+    })
     .from(practiceAnswersTable)
     .where(eq(practiceAnswersTable.studentId, studentId));
 
-  // Total questions from test attempts
-  const [tCount] = await db
-    .select({ count: sql<number>`count(*)::int` })
+  // Same for test attempts
+  const testRows = await db
+    .select({
+      day: sql<string>`DATE(${attemptsTable.completedAt} AT TIME ZONE 'UTC')::text`,
+      questionId: attemptAnswersTable.questionId,
+    })
     .from(attemptAnswersTable)
     .innerJoin(attemptsTable, eq(attemptAnswersTable.attemptId, attemptsTable.id))
     .where(sql`${attemptsTable.studentId} = ${studentId}`);
 
-  const totalQuestions = (pCount?.count ?? 0) + (tCount?.count ?? 0);
+  // Build day → Set<questionId> for per-day dedup, and a global set for all-time dedup
+  const dayQuestions: Record<string, Set<number>> = {};
+  const allQuestions = new Set<number>();
 
-  // Diamonds: count distinct days where combined answers >= target
-  // Step 1: practice per day
-  const practicePerDay = await db
-    .select({
-      day: sql<string>`DATE(${practiceAnswersTable.answeredAt} AT TIME ZONE 'UTC')::text`,
-      cnt: sql<number>`count(*)::int`,
-    })
-    .from(practiceAnswersTable)
-    .where(eq(practiceAnswersTable.studentId, studentId))
-    .groupBy(sql`DATE(${practiceAnswersTable.answeredAt} AT TIME ZONE 'UTC')`);
-
-  // Step 2: test attempts per day
-  const testsPerDay = await db
-    .select({
-      day: sql<string>`DATE(${attemptsTable.completedAt} AT TIME ZONE 'UTC')::text`,
-      cnt: sql<number>`count(${attemptAnswersTable.id})::int`,
-    })
-    .from(attemptAnswersTable)
-    .innerJoin(attemptsTable, eq(attemptAnswersTable.attemptId, attemptsTable.id))
-    .where(sql`${attemptsTable.studentId} = ${studentId}`)
-    .groupBy(sql`DATE(${attemptsTable.completedAt} AT TIME ZONE 'UTC')`);
-
-  // Merge both into a day → total map
-  const dayTotals: Record<string, number> = {};
-  for (const r of practicePerDay) {
-    dayTotals[r.day] = (dayTotals[r.day] ?? 0) + r.cnt;
+  for (const r of practiceRows) {
+    (dayQuestions[r.day] ??= new Set()).add(r.questionId);
+    allQuestions.add(r.questionId);
   }
-  for (const r of testsPerDay) {
-    dayTotals[r.day] = (dayTotals[r.day] ?? 0) + r.cnt;
+  for (const r of testRows) {
+    (dayQuestions[r.day] ??= new Set()).add(r.questionId);
+    allQuestions.add(r.questionId);
   }
 
-  const diamonds = Object.values(dayTotals).filter((v) => v >= target).length;
+  // totalQuestions = distinct question IDs ever answered (across both practice + tests)
+  const totalQuestions = allQuestions.size;
+
+  // diamonds = days where distinct questions answered that day >= target
+  const diamonds = Object.values(dayQuestions).filter((s) => s.size >= target).length;
 
   return { totalQuestions, diamonds };
 }
