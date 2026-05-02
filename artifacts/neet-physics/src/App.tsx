@@ -45,9 +45,6 @@ function AppRouter() {
   if (!user) return <LoginScreen />;
   if (user.role === "teacher") return <AdminPanel />;
 
-  if (user.courseType === "test_only" && user.status === "pending") return <PendingApprovalScreen />;
-  if (user.courseType === "test_only" && user.status === "rejected") return <PendingApprovalScreen rejected />;
-
   return (
     <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
       <StudentApp />

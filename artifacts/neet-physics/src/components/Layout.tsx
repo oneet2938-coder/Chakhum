@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { BookOpen, LayoutDashboard, FlaskConical, ClipboardList, LogOut, Trophy } from "lucide-react";
+import { BookOpen, LayoutDashboard, FlaskConical, ClipboardList, LogOut, Trophy, Hourglass, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
 import { useGamification } from "@/hooks/useGamification";
@@ -108,6 +108,26 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       </aside>
 
       <main className="flex-1 overflow-auto">
+        {/* Test Series approval banner */}
+        {user?.role === "student" && user.courseType === "test_only" && user.status === "pending" && (
+          <div className="flex items-center gap-2.5 px-4 py-2.5 bg-amber-500/10 border-b border-amber-500/20">
+            <Hourglass className="w-3.5 h-3.5 text-amber-400 shrink-0 animate-pulse" />
+            <p className="text-xs text-amber-300 flex-1">
+              <span className="font-semibold">Test Series approval pending</span> — your teacher will unlock access soon.
+            </p>
+            <Link href="/tests" className="text-[10px] font-bold text-amber-400 hover:text-amber-300 transition-colors shrink-0 underline underline-offset-2">
+              View status →
+            </Link>
+          </div>
+        )}
+        {user?.role === "student" && user.courseType === "test_only" && user.status === "rejected" && (
+          <div className="flex items-center gap-2.5 px-4 py-2.5 bg-rose-500/10 border-b border-rose-500/20">
+            <XCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+            <p className="text-xs text-rose-300 flex-1">
+              <span className="font-semibold">Test Series access not approved</span> — contact your teacher.
+            </p>
+          </div>
+        )}
         {children}
       </main>
     </div>
