@@ -3,7 +3,7 @@ import { Link } from "wouter";
 import {
   Clock, FileText, ChevronRight, CalendarDays, Trophy,
   Lock, FlaskConical, CheckCircle2, Circle, AlertCircle,
-  IndianRupee, ShieldCheck, Hourglass, XCircle,
+  IndianRupee, ShieldCheck, Hourglass, XCircle, ArrowLeft,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
@@ -100,6 +100,11 @@ export default function Tests() {
 
   return (
     <div className="p-6 space-y-6">
+
+      {/* ── Back button ── */}
+      <Link href="/" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
+        <ArrowLeft className="w-3.5 h-3.5" /> Back to Dashboard
+      </Link>
 
       {/* ── Header Banner ── */}
       <div className={cn(
