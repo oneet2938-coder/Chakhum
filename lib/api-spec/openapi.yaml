@@ -3,20 +3,29 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: EMC - Physics NEET Prep API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: topics
+    description: Physics chapters/topics
+  - name: questions
+    description: MCQ questions
+  - name: tests
+    description: Mock tests
+  - name: attempts
+    description: Test attempts and answers
+  - name: progress
+    description: User progress and stats
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +33,227 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /topics:
+    get:
+      operationId: listTopics
+      tags: [topics]
+      summary: List all physics topics
+      responses:
+        "200":
+          description: List of topics
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Topic"
+
+  /topics/{id}:
+    get:
+      operationId: getTopic
+      tags: [topics]
+      summary: Get a single topic
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Topic detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Topic"
+        "404":
+          description: Not found
+
+  /questions:
+    get:
+      operationId: listQuestions
+      tags: [questions]
+      summary: List questions with optional filters
+      parameters:
+        - name: topicId
+          in: query
+          schema:
+            type: integer
+        - name: difficulty
+          in: query
+          schema:
+            type: string
+            enum: [easy, medium, hard]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of questions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Question"
+
+  /questions/{id}:
+    get:
+      operationId: getQuestion
+      tags: [questions]
+      summary: Get a single question with explanation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Question detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Question"
+        "404":
+          description: Not found
+
+  /tests:
+    get:
+      operationId: listTests
+      tags: [tests]
+      summary: List available mock tests
+      responses:
+        "200":
+          description: List of tests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MockTest"
+    post:
+      operationId: createTest
+      tags: [tests]
+      summary: Create a new mock test
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTestBody"
+      responses:
+        "201":
+          description: Created test
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MockTest"
+
+  /tests/{id}:
+    get:
+      operationId: getTest
+      tags: [tests]
+      summary: Get a mock test with its questions
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Test with questions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MockTestWithQuestions"
+        "404":
+          description: Not found
+
+  /attempts:
+    get:
+      operationId: listAttempts
+      tags: [attempts]
+      summary: List all past attempts
+      responses:
+        "200":
+          description: List of attempts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Attempt"
+    post:
+      operationId: submitAttempt
+      tags: [attempts]
+      summary: Submit a completed test attempt
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubmitAttemptBody"
+      responses:
+        "201":
+          description: Attempt result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttemptResult"
+
+  /attempts/{id}:
+    get:
+      operationId: getAttempt
+      tags: [attempts]
+      summary: Get a specific attempt with detailed results
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Attempt detail with answers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttemptResult"
+        "404":
+          description: Not found
+
+  /progress/summary:
+    get:
+      operationId: getProgressSummary
+      tags: [progress]
+      summary: Get overall progress summary (dashboard stats)
+      responses:
+        "200":
+          description: Progress summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProgressSummary"
+
+  /progress/topics:
+    get:
+      operationId: getTopicProgress
+      tags: [progress]
+      summary: Get topic-wise performance breakdown
+      responses:
+        "200":
+          description: Topic-wise progress
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TopicProgress"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +264,314 @@ components:
       required:
         - status
 
+    Topic:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        questionCount:
+          type: integer
+        icon:
+          type: string
+      required:
+        - id
+        - name
+        - description
+        - questionCount
+        - icon
+
+    Question:
+      type: object
+      properties:
+        id:
+          type: integer
+        topicId:
+          type: integer
+        topicName:
+          type: string
+        text:
+          type: string
+        options:
+          type: array
+          items:
+            type: string
+        correctOption:
+          type: integer
+        explanation:
+          type: string
+        difficulty:
+          type: string
+          enum: [easy, medium, hard]
+        year:
+          type: integer
+          nullable: true
+      required:
+        - id
+        - topicId
+        - topicName
+        - text
+        - options
+        - correctOption
+        - explanation
+        - difficulty
+
+    MockTest:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        description:
+          type: string
+        questionCount:
+          type: integer
+        durationMinutes:
+          type: integer
+        difficulty:
+          type: string
+          enum: [easy, medium, hard, mixed]
+        topicIds:
+          type: array
+          items:
+            type: integer
+      required:
+        - id
+        - title
+        - description
+        - questionCount
+        - durationMinutes
+        - difficulty
+        - topicIds
+
+    MockTestWithQuestions:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        description:
+          type: string
+        durationMinutes:
+          type: integer
+        difficulty:
+          type: string
+          enum: [easy, medium, hard, mixed]
+        questions:
+          type: array
+          items:
+            $ref: "#/components/schemas/Question"
+      required:
+        - id
+        - title
+        - description
+        - durationMinutes
+        - difficulty
+        - questions
+
+    CreateTestBody:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        topicIds:
+          type: array
+          items:
+            type: integer
+        questionCount:
+          type: integer
+        durationMinutes:
+          type: integer
+        difficulty:
+          type: string
+          enum: [easy, medium, hard, mixed]
+      required:
+        - title
+        - topicIds
+        - questionCount
+        - durationMinutes
+        - difficulty
+
+    SubmitAttemptBody:
+      type: object
+      properties:
+        testId:
+          type: integer
+        timeTakenSeconds:
+          type: integer
+        answers:
+          type: array
+          items:
+            $ref: "#/components/schemas/AnswerInput"
+      required:
+        - testId
+        - timeTakenSeconds
+        - answers
+
+    AnswerInput:
+      type: object
+      properties:
+        questionId:
+          type: integer
+        selectedOption:
+          type: integer
+          nullable: true
+      required:
+        - questionId
+        - selectedOption
+
+    Attempt:
+      type: object
+      properties:
+        id:
+          type: integer
+        testId:
+          type: integer
+        testTitle:
+          type: string
+        score:
+          type: integer
+        totalQuestions:
+          type: integer
+        correctAnswers:
+          type: integer
+        timeTakenSeconds:
+          type: integer
+        completedAt:
+          type: string
+      required:
+        - id
+        - testId
+        - testTitle
+        - score
+        - totalQuestions
+        - correctAnswers
+        - timeTakenSeconds
+        - completedAt
+
+    AttemptResult:
+      type: object
+      properties:
+        id:
+          type: integer
+        testId:
+          type: integer
+        testTitle:
+          type: string
+        score:
+          type: integer
+        totalQuestions:
+          type: integer
+        correctAnswers:
+          type: integer
+        timeTakenSeconds:
+          type: integer
+        completedAt:
+          type: string
+        answers:
+          type: array
+          items:
+            $ref: "#/components/schemas/AnswerDetail"
+      required:
+        - id
+        - testId
+        - testTitle
+        - score
+        - totalQuestions
+        - correctAnswers
+        - timeTakenSeconds
+        - completedAt
+        - answers
+
+    AnswerDetail:
+      type: object
+      properties:
+        questionId:
+          type: integer
+        questionText:
+          type: string
+        selectedOption:
+          type: integer
+          nullable: true
+        correctOption:
+          type: integer
+        isCorrect:
+          type: boolean
+        explanation:
+          type: string
+        topicName:
+          type: string
+      required:
+        - questionId
+        - questionText
+        - selectedOption
+        - correctOption
+        - isCorrect
+        - explanation
+        - topicName
+
+    ProgressSummary:
+      type: object
+      properties:
+        totalQuestionsAnswered:
+          type: integer
+        totalCorrect:
+          type: integer
+        accuracy:
+          type: number
+        totalTestsTaken:
+          type: integer
+        averageScore:
+          type: number
+        bestScore:
+          type: integer
+        streak:
+          type: integer
+        weakTopics:
+          type: array
+          items:
+            type: string
+        strongTopics:
+          type: array
+          items:
+            type: string
+      required:
+        - totalQuestionsAnswered
+        - totalCorrect
+        - accuracy
+        - totalTestsTaken
+        - averageScore
+        - bestScore
+        - streak
+        - weakTopics
+        - strongTopics
+
+    TopicProgress:
+      type: object
+      properties:
+        topicId:
+          type: integer
+        topicName:
+          type: string
+        questionsAttempted:
+          type: integer
+        correctAnswers:
+          type: integer
+        accuracy:
+          type: number
+        totalQuestions:
+          type: integer
+      required:
+        - topicId
+        - topicName
+        - questionsAttempted
+        - correctAnswers
+        - accuracy
+        - totalQuestions
