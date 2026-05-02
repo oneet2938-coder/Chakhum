@@ -2,7 +2,10 @@ import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { AuthProvider, useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
+import LoginScreen from "@/pages/LoginScreen";
+import AdminPanel from "@/pages/AdminPanel";
 import Dashboard from "@/pages/Dashboard";
 import Topics from "@/pages/Topics";
 import TopicDetail from "@/pages/TopicDetail";
@@ -12,9 +15,11 @@ import TestDetail from "@/pages/TestDetail";
 import Results from "@/pages/Results";
 import NotFound from "@/pages/not-found";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { staleTime: 30_000 } },
+});
 
-function Router() {
+function StudentApp() {
   return (
     <Layout>
       <Switch>
@@ -31,13 +36,26 @@ function Router() {
   );
 }
 
+function AppRouter() {
+  const { user } = useAuth();
+
+  if (!user) return <LoginScreen />;
+  if (user.role === "teacher") return <AdminPanel />;
+
+  return (
+    <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+      <StudentApp />
+    </WouterRouter>
+  );
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <Router />
-        </WouterRouter>
+        <AuthProvider>
+          <AppRouter />
+        </AuthProvider>
         <Toaster />
       </TooltipProvider>
     </QueryClientProvider>

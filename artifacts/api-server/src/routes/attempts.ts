@@ -7,12 +7,24 @@ import {
   questionsTable,
   topicsTable,
 } from "@workspace/db";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, and, isNull } from "drizzle-orm";
 import { SubmitAttemptBody } from "@workspace/api-zod";
 
 const router = Router();
 
+function getStudentId(req: any): number | null {
+  const h = req.headers["x-student-id"];
+  if (!h) return null;
+  const n = parseInt(h as string);
+  return isNaN(n) ? null : n;
+}
+
 router.get("/attempts", async (req, res) => {
+  const studentId = getStudentId(req);
+  const condition = studentId != null
+    ? eq(attemptsTable.studentId, studentId)
+    : isNull(attemptsTable.studentId);
+
   const rows = await db
     .select({
       id: attemptsTable.id,
@@ -26,11 +38,10 @@ router.get("/attempts", async (req, res) => {
     })
     .from(attemptsTable)
     .innerJoin(testsTable, eq(attemptsTable.testId, testsTable.id))
+    .where(condition)
     .orderBy(attemptsTable.completedAt);
 
-  res.json(
-    rows.map((r) => ({ ...r, completedAt: r.completedAt.toISOString() }))
-  );
+  res.json(rows.map((r) => ({ ...r, completedAt: r.completedAt.toISOString() })));
 });
 
 router.post("/attempts", async (req, res) => {
@@ -38,14 +49,12 @@ router.post("/attempts", async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: parsed.error });
 
   const { testId, timeTakenSeconds, answers } = parsed.data;
+  const studentId = getStudentId(req);
 
   const questionIds = answers.map((a) => a.questionId);
   const questions =
     questionIds.length > 0
-      ? await db
-          .select()
-          .from(questionsTable)
-          .where(inArray(questionsTable.id, questionIds))
+      ? await db.select().from(questionsTable).where(inArray(questionsTable.id, questionIds))
       : [];
 
   const qMap = Object.fromEntries(questions.map((q) => [q.id, q]));
@@ -61,18 +70,10 @@ router.post("/attempts", async (req, res) => {
 
   const [attempt] = await db
     .insert(attemptsTable)
-    .values({
-      testId,
-      score,
-      totalQuestions: answers.length,
-      correctAnswers: correct,
-      timeTakenSeconds,
-    })
+    .values({ testId, score, totalQuestions: answers.length, correctAnswers: correct, timeTakenSeconds, studentId })
     .returning();
 
-  await db.insert(attemptAnswersTable).values(
-    answerRows.map((a) => ({ ...a, attemptId: attempt.id }))
-  );
+  await db.insert(attemptAnswersTable).values(answerRows.map((a) => ({ ...a, attemptId: attempt.id })));
 
   res.status(201).json({ ...attempt, completedAt: attempt.completedAt.toISOString() });
 });
@@ -111,11 +112,7 @@ router.get("/attempts/:id", async (req, res) => {
     .innerJoin(topicsTable, eq(questionsTable.topicId, topicsTable.id))
     .where(eq(attemptAnswersTable.attemptId, id));
 
-  res.json({
-    ...attempt,
-    completedAt: attempt.completedAt.toISOString(),
-    answers: answerRows,
-  });
+  res.json({ ...attempt, completedAt: attempt.completedAt.toISOString(), answers: answerRows });
 });
 
 export default router;

@@ -1,12 +1,24 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { attemptsTable, attemptAnswersTable, questionsTable, topicsTable } from "@workspace/db";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, isNull } from "drizzle-orm";
 
 const router = Router();
 
+function getStudentId(req: any): number | null {
+  const h = req.headers["x-student-id"];
+  if (!h) return null;
+  const n = parseInt(h as string);
+  return isNaN(n) ? null : n;
+}
+
 router.get("/progress/summary", async (req, res) => {
-  const attempts = await db.select().from(attemptsTable);
+  const studentId = getStudentId(req);
+  const condition = studentId != null
+    ? eq(attemptsTable.studentId, studentId)
+    : isNull(attemptsTable.studentId);
+
+  const attempts = await db.select().from(attemptsTable).where(condition);
 
   const totalTestsTaken = attempts.length;
   const totalQuestionsAnswered = attempts.reduce((s, a) => s + a.totalQuestions, 0);
@@ -25,38 +37,31 @@ router.get("/progress/summary", async (req, res) => {
     .from(attemptAnswersTable)
     .innerJoin(questionsTable, eq(attemptAnswersTable.questionId, questionsTable.id))
     .innerJoin(topicsTable, eq(questionsTable.topicId, topicsTable.id))
+    .innerJoin(attemptsTable, eq(attemptAnswersTable.attemptId, attemptsTable.id))
+    .where(condition)
     .groupBy(topicsTable.id, topicsTable.name);
 
   const weakTopics: string[] = [];
   const strongTopics: string[] = [];
-
   topicPerf.forEach((t) => {
     const acc = t.total > 0 ? t.correct / t.total : 0;
     if (acc < 0.5 && t.total >= 3) weakTopics.push(t.topicName);
     if (acc >= 0.75 && t.total >= 3) strongTopics.push(t.topicName);
   });
 
-  res.json({
-    totalQuestionsAnswered,
-    totalCorrect,
-    accuracy,
-    totalTestsTaken,
-    averageScore,
-    bestScore,
-    streak: 0,
-    weakTopics,
-    strongTopics,
-  });
+  res.json({ totalQuestionsAnswered, totalCorrect, accuracy, totalTestsTaken, averageScore, bestScore, streak: 0, weakTopics, strongTopics });
 });
 
 router.get("/progress/topics", async (req, res) => {
+  const studentId = getStudentId(req);
+  const condition = studentId != null
+    ? eq(attemptsTable.studentId, studentId)
+    : isNull(attemptsTable.studentId);
+
   const topics = await db.select().from(topicsTable);
 
   const perTopic = await db
-    .select({
-      topicId: questionsTable.topicId,
-      total: sql<number>`count(*)::int`,
-    })
+    .select({ topicId: questionsTable.topicId, total: sql<number>`count(*)::int` })
     .from(questionsTable)
     .groupBy(questionsTable.topicId);
 
@@ -68,6 +73,8 @@ router.get("/progress/topics", async (req, res) => {
     })
     .from(attemptAnswersTable)
     .innerJoin(questionsTable, eq(attemptAnswersTable.questionId, questionsTable.id))
+    .innerJoin(attemptsTable, eq(attemptAnswersTable.attemptId, attemptsTable.id))
+    .where(condition)
     .groupBy(questionsTable.topicId);
 
   const totalMap = Object.fromEntries(perTopic.map((p) => [p.topicId, p.total]));
@@ -79,14 +86,7 @@ router.get("/progress/topics", async (req, res) => {
       const attempted = p?.attempted ?? 0;
       const correct = p?.correct ?? 0;
       const accuracy = attempted > 0 ? Math.round((correct / attempted) * 100) : 0;
-      return {
-        topicId: t.id,
-        topicName: t.name,
-        questionsAttempted: attempted,
-        correctAnswers: correct,
-        accuracy,
-        totalQuestions: totalMap[t.id] ?? 0,
-      };
+      return { topicId: t.id, topicName: t.name, questionsAttempted: attempted, correctAnswers: correct, accuracy, totalQuestions: totalMap[t.id] ?? 0 };
     })
   );
 });
