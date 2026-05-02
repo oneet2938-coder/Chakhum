@@ -1,9 +1,90 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { studentsTable, attemptsTable, testsTable, attemptAnswersTable, questionsTable, topicsTable } from "@workspace/db";
+import {
+  studentsTable,
+  attemptsTable,
+  testsTable,
+  attemptAnswersTable,
+  questionsTable,
+  topicsTable,
+  settingsTable,
+} from "@workspace/db";
 import { eq, sql, isNotNull } from "drizzle-orm";
 
 const router = Router();
+
+// ── Settings ──────────────────────────────────────────────────────────────────
+
+router.get("/admin/settings", async (_req, res) => {
+  const rows = await db.select().from(settingsTable);
+  const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
+  res.json({ dailyPracticeTarget: parseInt(map["daily_practice_target"] ?? "20") });
+});
+
+router.put("/admin/settings", async (req, res) => {
+  const { dailyPracticeTarget } = req.body as { dailyPracticeTarget?: number };
+  if (!dailyPracticeTarget || isNaN(dailyPracticeTarget) || dailyPracticeTarget < 1) {
+    return res.status(400).json({ error: "dailyPracticeTarget must be a positive number" });
+  }
+  await db
+    .insert(settingsTable)
+    .values({ key: "daily_practice_target", value: String(dailyPracticeTarget) })
+    .onConflictDoUpdate({ target: settingsTable.key, set: { value: String(dailyPracticeTarget) } });
+  res.json({ dailyPracticeTarget });
+});
+
+// ── Daily practice report ──────────────────────────────────────────────────────
+
+router.get("/admin/daily-report", async (_req, res) => {
+  const [setting] = await db
+    .select()
+    .from(settingsTable)
+    .where(eq(settingsTable.key, "daily_practice_target"));
+  const target = parseInt(setting?.value ?? "20");
+
+  const students = await db
+    .select()
+    .from(studentsTable)
+    .orderBy(studentsTable.createdAt);
+
+  // Count questions answered TODAY per student (via attempt_answers linked to today's attempts)
+  const todayActivity = await db
+    .select({
+      studentId: attemptsTable.studentId,
+      questionsToday: sql<number>`count(${attemptAnswersTable.id})::int`,
+      testsToday: sql<number>`count(distinct ${attemptsTable.id})::int`,
+    })
+    .from(attemptAnswersTable)
+    .innerJoin(attemptsTable, eq(attemptAnswersTable.attemptId, attemptsTable.id))
+    .where(
+      sql`DATE(${attemptsTable.completedAt} AT TIME ZONE 'UTC') = CURRENT_DATE
+          AND ${attemptsTable.studentId} IS NOT NULL`
+    )
+    .groupBy(attemptsTable.studentId);
+
+  const activityMap = Object.fromEntries(todayActivity.map((a) => [a.studentId!, a]));
+
+  const report = students.map((s) => {
+    const activity = activityMap[s.id];
+    const questionsToday = activity?.questionsToday ?? 0;
+    const testsToday = activity?.testsToday ?? 0;
+    const completed = questionsToday >= target;
+    return {
+      id: s.id,
+      name: s.name,
+      phone: s.phone,
+      questionsToday,
+      testsToday,
+      target,
+      completed,
+      remaining: Math.max(0, target - questionsToday),
+    };
+  });
+
+  res.json({ target, report });
+});
+
+// ── Student list ───────────────────────────────────────────────────────────────
 
 router.get("/admin/students", async (_req, res) => {
   const students = await db.select().from(studentsTable).orderBy(studentsTable.createdAt);
@@ -64,7 +145,9 @@ router.get("/admin/students/:id/attempts", async (req, res) => {
 });
 
 router.get("/admin/overview", async (_req, res) => {
-  const [studentCount] = await db.select({ count: sql<number>`count(*)::int` }).from(studentsTable);
+  const [studentCount] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(studentsTable);
   const [attemptStats] = await db
     .select({
       total: sql<number>`count(*)::int`,
