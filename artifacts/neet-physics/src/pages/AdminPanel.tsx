@@ -13,6 +13,8 @@ interface StudentStat {
   id: number;
   name: string;
   phone: string;
+  courseType: string;
+  status: string;
   joinedAt: string;
   testCount: number;
   avgScore: number;
@@ -90,6 +92,7 @@ interface PendingStudent {
   name: string;
   phone: string;
   status: string;
+  courseType: string;
   createdAt: string;
 }
 
@@ -330,7 +333,10 @@ export default function AdminPanel() {
             {/* Hero: Mastery Test Series info */}
             <div className="bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/25 rounded-xl p-5 flex items-center justify-between gap-4">
               <div>
-                <p className="text-[10px] font-bold text-primary uppercase tracking-widest mb-1">Paid Test Series</p>
+                <div className="flex items-center gap-2 mb-1">
+                  <p className="text-[10px] font-bold text-primary uppercase tracking-widest">Paid Test Series</p>
+                  <span className="text-[9px] font-black text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full uppercase tracking-wider">Every Saturday</span>
+                </div>
                 <h3 className="text-lg font-black text-foreground">Mastery Test Series</h3>
                 <p className="text-xs text-muted-foreground mt-0.5">Approve students who have paid ₹5,000 to grant full access</p>
               </div>
@@ -384,7 +390,10 @@ export default function AdminPanel() {
                         <span className="text-sm font-black text-amber-400">{s.name[0].toUpperCase()}</span>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-foreground truncate">{s.name}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-semibold text-foreground truncate">{s.name}</p>
+                          <span className="text-[9px] font-black text-primary bg-primary/10 border border-primary/20 px-1.5 py-0.5 rounded-full whitespace-nowrap">MASTERY</span>
+                        </div>
                         <p className="text-[11px] text-muted-foreground flex items-center gap-1">
                           <Phone className="w-2.5 h-2.5" />{s.phone}
                           <span className="mx-1 text-border">·</span>
@@ -664,6 +673,10 @@ export default function AdminPanel() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="text-sm font-semibold text-foreground truncate">{s.name}</p>
+                        {(s as unknown as StudentStat).courseType === "test_only"
+                          ? <span className="text-[9px] font-black text-primary bg-primary/10 border border-primary/20 px-1.5 py-0.5 rounded-full shrink-0">MASTERY</span>
+                          : <span className="text-[9px] font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-full shrink-0">FOUNDATION</span>
+                        }
                         {isDone && (
                           <span className="text-[9px] font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/25 px-1.5 py-0.5 rounded-full">
                             ✓ TODAY
@@ -675,9 +688,11 @@ export default function AdminPanel() {
                           </span>
                         )}
                       </div>
-                      <p className="text-[11px] text-muted-foreground flex items-center gap-1">
-                        <Phone className="w-2.5 h-2.5" />{s.phone}
-                      </p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                          <Phone className="w-2.5 h-2.5" />{s.phone}
+                        </p>
+                      </div>
                     </div>
                     <div className="flex items-center gap-5 shrink-0 mr-2">
                       <div className="text-center">

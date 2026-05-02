@@ -7,6 +7,7 @@ export const studentsTable = pgTable("students", {
   name: text("name").notNull(),
   phone: text("phone").notNull().unique(),
   status: text("status").notNull().default("pending"),
+  courseType: text("course_type").notNull().default("foundation"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

@@ -137,6 +137,8 @@ router.get("/admin/students", async (_req, res) => {
       id: s.id,
       name: s.name,
       phone: s.phone,
+      courseType: s.courseType,
+      status: s.status,
       joinedAt: s.createdAt.toISOString(),
       testCount: st?.testCount ?? 0,
       avgScore: st?.avgScore ?? 0,
@@ -350,7 +352,11 @@ router.get("/admin/approvals", async (_req, res) => {
     .from(studentsTable)
     .where(eq(studentsTable.status, "pending"))
     .orderBy(studentsTable.createdAt);
-  res.json(rows.map((s) => ({ ...s, createdAt: s.createdAt.toISOString() })));
+  // Only test_only students need approval — foundation is auto-approved
+  res.json(rows
+    .filter((s) => s.courseType === "test_only")
+    .map((s) => ({ ...s, createdAt: s.createdAt.toISOString() }))
+  );
 });
 
 router.put("/admin/students/:id/approve", async (req, res) => {

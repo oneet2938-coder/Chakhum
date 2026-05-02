@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 const router = Router();
 
 router.post("/students/login", async (req, res) => {
-  const { name, phone } = req.body as { name?: string; phone?: string };
+  const { name, phone, courseType } = req.body as { name?: string; phone?: string; courseType?: string };
   if (!name || !phone) return res.status(400).json({ error: "name and phone are required" });
 
   const existing = await db.select().from(studentsTable).where(eq(studentsTable.phone, phone));
@@ -14,9 +14,13 @@ router.post("/students/login", async (req, res) => {
     return res.json(existing[0]);
   }
 
+  const resolvedCourseType = courseType === "test_only" ? "test_only" : "foundation";
+  // Foundation is always auto-approved; test_only needs teacher approval
+  const status = resolvedCourseType === "foundation" ? "approved" : "pending";
+
   const [student] = await db
     .insert(studentsTable)
-    .values({ name, phone, status: "pending" })
+    .values({ name, phone, status, courseType: resolvedCourseType })
     .returning();
 
   return res.status(201).json(student);

@@ -3,6 +3,7 @@ import { setExtraHeader, clearExtraHeaders } from "@workspace/api-client-react";
 
 export type Role = "student" | "teacher";
 export type StudentStatus = "pending" | "approved" | "rejected";
+export type CourseType = "foundation" | "test_only";
 
 export interface StudentUser {
   role: "student";
@@ -10,6 +11,7 @@ export interface StudentUser {
   phone: string;
   studentId: number;
   status: StudentStatus;
+  courseType: CourseType;
 }
 
 export interface TeacherUser {
@@ -77,7 +79,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       if (!res.ok) return;
       const data = await res.json();
-      const updated: StudentUser = { ...user, status: data.status };
+      const updated: StudentUser = {
+        ...user,
+        status: data.status,
+        courseType: data.courseType ?? data.course_type ?? user.courseType,
+      };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
       setUser(updated);
     } catch {
