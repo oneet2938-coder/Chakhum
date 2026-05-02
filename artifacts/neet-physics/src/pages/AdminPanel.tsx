@@ -2,10 +2,11 @@ import { useState, useEffect, useCallback } from "react";
 import {
   Users, TrendingUp, ClipboardList, ChevronDown, ChevronUp,
   LogOut, Phone, CheckCircle2, XCircle, Target, Settings, Save,
-  RefreshCw,
+  RefreshCw, Trophy,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
+import { getRankForQuestions } from "@/lib/ranks";
 
 interface StudentStat {
   id: number;
@@ -48,7 +49,17 @@ interface DailyReportRow {
   remaining: number;
 }
 
-type Tab = "daily" | "students" | "overview";
+interface LeaderboardRow {
+  id: number;
+  name: string;
+  phone: string;
+  totalQuestions: number;
+  diamonds: number;
+  rank: { level: number; title: string; color: string; bg: string; border: string; icon: string };
+  position: number;
+}
+
+type Tab = "daily" | "students" | "overview" | "leaderboard";
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
@@ -84,6 +95,10 @@ export default function AdminPanel() {
   const [attempts, setAttempts] = useState<Record<number, StudentAttempt[]>>({});
   const [loadingAttempts, setLoadingAttempts] = useState<Record<number, boolean>>({});
 
+  // Leaderboard
+  const [leaderboard, setLeaderboard] = useState<LeaderboardRow[]>([]);
+  const [lbLoading, setLbLoading] = useState(false);
+
   const fetchDailyReport = useCallback(async () => {
     setReportLoading(true);
     const data = await fetch("/api/admin/daily-report").then((r) => r.json());
@@ -94,9 +109,7 @@ export default function AdminPanel() {
   }, []);
 
   useEffect(() => {
-    // Load settings + daily report
     fetchDailyReport();
-    // Load all students + overview in parallel
     Promise.all([
       fetch("/api/admin/students").then((r) => r.json()),
       fetch("/api/admin/overview").then((r) => r.json()),
@@ -106,6 +119,15 @@ export default function AdminPanel() {
       setMainLoading(false);
     });
   }, [fetchDailyReport]);
+
+  useEffect(() => {
+    if (tab !== "leaderboard") return;
+    setLbLoading(true);
+    fetch("/api/leaderboard").then((r) => r.json()).then((d) => {
+      setLeaderboard(d);
+      setLbLoading(false);
+    });
+  }, [tab]);
 
   async function saveTarget() {
     const n = parseInt(targetInput);
@@ -202,8 +224,8 @@ export default function AdminPanel() {
         </div>
 
         {/* ── Tabs ── */}
-        <div className="flex gap-1 bg-muted/40 border border-border rounded-lg p-1 w-fit">
-          {([ ["daily", "Daily Report"], ["students", "All Students"], ["overview", "Overview"] ] as [Tab, string][]).map(([id, label]) => (
+        <div className="flex gap-1 bg-muted/40 border border-border rounded-lg p-1 w-fit flex-wrap">
+          {([ ["daily", "Daily Report"], ["students", "All Students"], ["overview", "Overview"], ["leaderboard", "💎 Leaderboard"] ] as [Tab, string][]).map(([id, label]) => (
             <button
               key={id}
               onClick={() => setTab(id)}
@@ -211,7 +233,8 @@ export default function AdminPanel() {
                 "px-4 py-1.5 text-xs font-semibold rounded-md transition-all",
                 tab === id
                   ? "bg-card text-foreground shadow-sm border border-border"
-                  : "text-muted-foreground hover:text-foreground"
+                  : "text-muted-foreground hover:text-foreground",
+                id === "leaderboard" && tab !== "leaderboard" && "text-yellow-500/80 hover:text-yellow-400"
               )}
             >
               {label}
@@ -522,6 +545,127 @@ export default function AdminPanel() {
             )}
           </div>
         )}
+        {/* ── Leaderboard Tab ── */}
+        {tab === "leaderboard" && (
+          <div className="space-y-4">
+            <div className="bg-gradient-to-r from-yellow-500/10 to-amber-500/5 border border-yellow-500/20 rounded-xl p-4 flex items-center gap-3">
+              <span className="text-2xl">💎</span>
+              <div>
+                <p className="text-sm font-bold text-yellow-300">365-Day Diamond Challenge</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Students earn 1 diamond for each day they complete the daily practice target.
+                  Most diamonds after 365 days wins a prize!
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-card border border-card-border rounded-xl overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <Trophy className="w-4 h-4 text-yellow-400" /> Diamond Standings
+                </h3>
+                <button
+                  onClick={() => {
+                    setLbLoading(true);
+                    fetch("/api/leaderboard").then((r) => r.json()).then((d) => { setLeaderboard(d); setLbLoading(false); });
+                  }}
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <RefreshCw className={cn("w-3.5 h-3.5", lbLoading && "animate-spin")} /> Refresh
+                </button>
+              </div>
+
+              {lbLoading ? (
+                <div className="space-y-px">
+                  {[...Array(3)].map((_, i) => <div key={i} className="h-16 bg-muted/30 animate-pulse" />)}
+                </div>
+              ) : leaderboard.length === 0 ? (
+                <div className="py-10 text-center">
+                  <Trophy className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">No students yet.</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-border">
+                  {leaderboard.map((row) => {
+                    const posLabel = row.position === 1 ? "🥇" : row.position === 2 ? "🥈" : row.position === 3 ? "🥉" : `#${row.position}`;
+                    const { rank, next, progressToNext } = getRankForQuestions(row.totalQuestions);
+                    return (
+                      <div key={row.id} className="flex items-center gap-3 px-4 py-3 hover:bg-muted/20 transition-colors">
+                        <div className="w-8 text-center text-sm shrink-0">{posLabel}</div>
+                        <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
+                          <span className="text-xs font-bold text-primary">{row.name[0].toUpperCase()}</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-sm font-semibold text-foreground truncate">{row.name}</p>
+                            <span className={cn(
+                              "text-[10px] px-1.5 py-0.5 rounded-full border font-semibold shrink-0",
+                              rank.color, rank.bg, rank.border
+                            )}>
+                              {rank.icon} {rank.title}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <Phone className="w-2.5 h-2.5 text-muted-foreground" />
+                            <span className="text-[10px] text-muted-foreground">{row.phone}</span>
+                          </div>
+                          {next && (
+                            <div className="mt-1 flex items-center gap-1.5">
+                              <div className="w-20 h-1 bg-muted rounded-full overflow-hidden">
+                                <div
+                                  className={cn("h-full rounded-full", rank.color.replace("text-", "bg-").replace("-400", "-500").replace("-300", "-400"))}
+                                  style={{ width: `${progressToNext}%` }}
+                                />
+                              </div>
+                              <span className="text-[9px] text-muted-foreground">{row.totalQuestions}/{next.minQ} → {next.title}</span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="text-center shrink-0 w-16">
+                          <div className="flex items-center gap-1 justify-center">
+                            <span className="text-base">💎</span>
+                            <span className="text-lg font-bold tabular-nums text-cyan-300">{row.diamonds}</span>
+                          </div>
+                          <p className="text-[9px] text-muted-foreground">diamonds</p>
+                        </div>
+                        <div className="text-center shrink-0 w-14">
+                          <p className="text-sm font-bold tabular-nums text-foreground">{row.totalQuestions}</p>
+                          <p className="text-[9px] text-muted-foreground">questions</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Rank guide for teacher */}
+            <div className="bg-card border border-card-border rounded-xl p-4">
+              <h3 className="text-sm font-semibold text-foreground mb-3">Medical Rank System</h3>
+              <div className="grid grid-cols-5 gap-2">
+                {[
+                  { level: 1,  title: "Intern",            minQ: 0,     icon: "🩺" },
+                  { level: 2,  title: "Medical Student",   minQ: 50,    icon: "📚" },
+                  { level: 3,  title: "House Surgeon",     minQ: 150,   icon: "✂️" },
+                  { level: 4,  title: "Junior Resident",   minQ: 350,   icon: "🏥" },
+                  { level: 5,  title: "Senior Resident",   minQ: 700,   icon: "💊" },
+                  { level: 6,  title: "Registrar",         minQ: 1200,  icon: "🔬" },
+                  { level: 7,  title: "Specialist",        minQ: 2000,  icon: "🧬" },
+                  { level: 8,  title: "Consultant",        minQ: 3500,  icon: "👨‍⚕️" },
+                  { level: 9,  title: "Senior Consultant", minQ: 5500,  icon: "🏆" },
+                  { level: 10, title: "Chief Physician",   minQ: 10000, icon: "⭐" },
+                ].map((r) => (
+                  <div key={r.level} className="bg-muted/30 rounded-lg px-2 py-2 text-center">
+                    <div className="text-base mb-0.5">{r.icon}</div>
+                    <p className="text-[10px] font-semibold text-foreground leading-tight">{r.title}</p>
+                    <p className="text-[9px] text-muted-foreground">{r.minQ === 0 ? "Start" : `${r.minQ}+ Qs`}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { BookOpen, LayoutDashboard, FlaskConical, ClipboardList, LogOut } from "lucide-react";
+import { BookOpen, LayoutDashboard, FlaskConical, ClipboardList, LogOut, Trophy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
 
@@ -8,6 +8,7 @@ const navItems = [
   { href: "/topics", label: "Topics", icon: BookOpen },
   { href: "/practice", label: "Practice", icon: FlaskConical },
   { href: "/tests", label: "Mock Tests", icon: ClipboardList },
+  { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
 ];
 
 export default function Layout({ children }: { children: React.ReactNode }) {
@@ -39,11 +40,15 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-all",
                   active
                     ? "bg-primary/10 text-primary"
-                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground"
+                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground",
+                  label === "Leaderboard" && !active && "text-yellow-500/80 hover:text-yellow-400"
                 )}
               >
-                <Icon className="w-4 h-4 shrink-0" />
+                <Icon className={cn("w-4 h-4 shrink-0", label === "Leaderboard" && !active && "text-yellow-500/80")} />
                 {label}
+                {label === "Leaderboard" && (
+                  <span className="ml-auto text-[9px] bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 px-1 rounded font-bold">💎</span>
+                )}
               </Link>
             );
           })}

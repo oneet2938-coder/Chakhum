@@ -8,6 +8,7 @@ import progressRouter from "./progress";
 import studentsRouter from "./students";
 import adminRouter from "./admin";
 import practiceRouter from "./practice";
+import gamificationRouter from "./gamification";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(progressRouter);
 router.use(studentsRouter);
 router.use(adminRouter);
 router.use(practiceRouter);
+router.use(gamificationRouter);
 
 export default router;

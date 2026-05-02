@@ -13,6 +13,7 @@ import Practice from "@/pages/Practice";
 import Tests from "@/pages/Tests";
 import TestDetail from "@/pages/TestDetail";
 import Results from "@/pages/Results";
+import Leaderboard from "@/pages/Leaderboard";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -30,6 +31,7 @@ function StudentApp() {
         <Route path="/tests" component={Tests} />
         <Route path="/tests/:id" component={TestDetail} />
         <Route path="/results/:id" component={Results} />
+        <Route path="/leaderboard" component={Leaderboard} />
         <Route component={NotFound} />
       </Switch>
     </Layout>
