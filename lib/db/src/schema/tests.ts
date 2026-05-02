@@ -1,4 +1,4 @@
-import { pgTable, serial, text, integer } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, date } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -10,6 +10,9 @@ export const testsTable = pgTable("tests", {
   durationMinutes: integer("duration_minutes").notNull(),
   difficulty: text("difficulty").notNull().default("mixed"),
   topicIds: integer("topic_ids").array().notNull().default([]),
+  testType: text("test_type").notNull().default("practice"),
+  scheduledDate: date("scheduled_date"),
+  classLevel: text("class_level"),
 });
 
 export const insertTestSchema = createInsertSchema(testsTable).omit({ id: true });
