@@ -44,7 +44,8 @@ interface DailyReportRow {
   name: string;
   phone: string;
   questionsToday: number;
-  testsToday: number;
+  fromTests: number;
+  fromPractice: number;
   target: number;
   completed: boolean;
   remaining: number;
@@ -341,66 +342,128 @@ export default function AdminPanel() {
                   <Users className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
                   <p className="text-sm text-muted-foreground">No students registered yet.</p>
                 </div>
-              ) : (
-                <div className="divide-y divide-border">
-                  {dailyReport.map((row, idx) => (
-                    <div key={row.id} className={cn(
-                      "flex items-center gap-4 px-4 py-3",
-                      row.completed ? "bg-emerald-500/5" : ""
+              ) : (() => {
+                const pending = dailyReport.filter((r) => !r.completed).sort((a, b) => a.questionsToday - b.questionsToday);
+                const completed = dailyReport.filter((r) => r.completed).sort((a, b) => b.questionsToday - a.questionsToday);
+
+                const renderRow = (row: DailyReportRow) => (
+                  <div key={row.id} className={cn(
+                    "flex items-center gap-4 px-4 py-3 transition-colors",
+                    row.completed ? "bg-emerald-500/5 hover:bg-emerald-500/8" : "bg-rose-500/5 hover:bg-rose-500/8"
+                  )}>
+                    {row.completed
+                      ? <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+                      : <XCircle className="w-5 h-5 text-rose-400 shrink-0" />
+                    }
+                    <div className={cn(
+                      "w-7 h-7 rounded-full flex items-center justify-center shrink-0",
+                      row.completed ? "bg-emerald-500/20" : "bg-rose-500/20"
                     )}>
-                      {/* Status icon */}
-                      {row.completed
-                        ? <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-                        : <XCircle className="w-5 h-5 text-rose-400 shrink-0" />
-                      }
+                      <span className={cn("text-[10px] font-bold",
+                        row.completed ? "text-emerald-400" : "text-rose-400"
+                      )}>{row.name[0].toUpperCase()}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-foreground truncate">{row.name}</p>
+                      <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                        <Phone className="w-2.5 h-2.5" />{row.phone}
+                      </p>
+                    </div>
 
-                      {/* Avatar + name */}
-                      <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
-                        <span className="text-[10px] font-bold text-primary">{row.name[0].toUpperCase()}</span>
+                    {/* Question breakdown */}
+                    <div className="hidden sm:flex items-center gap-3 shrink-0 text-center">
+                      <div>
+                        <p className="text-xs font-bold tabular-nums text-foreground">{row.fromPractice ?? 0}</p>
+                        <p className="text-[9px] text-muted-foreground">practice</p>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-foreground truncate">{row.name}</p>
-                        <p className="text-[11px] text-muted-foreground flex items-center gap-1">
-                          <Phone className="w-2.5 h-2.5" />{row.phone}
-                        </p>
-                      </div>
-
-                      {/* Progress bar */}
-                      <div className="w-32 shrink-0">
-                        <div className="flex justify-between mb-1">
-                          <span className="text-[10px] text-muted-foreground">
-                            {row.questionsToday} / {row.target}
-                          </span>
-                          <span className="text-[10px] font-semibold text-muted-foreground">
-                            {Math.min(100, Math.round((row.questionsToday / row.target) * 100))}%
-                          </span>
-                        </div>
-                        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                          <div
-                            className={cn("h-full rounded-full transition-all",
-                              row.completed ? "bg-emerald-500" : "bg-primary"
-                            )}
-                            style={{ width: `${Math.min(100, (row.questionsToday / row.target) * 100)}%` }}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Status badge */}
-                      <div className="w-36 shrink-0 text-right">
-                        {row.completed ? (
-                          <span className="text-xs font-semibold text-emerald-400 bg-emerald-500/15 border border-emerald-500/25 px-2 py-1 rounded-md">
-                            Practice Done ✓
-                          </span>
-                        ) : (
-                          <span className="text-xs font-semibold text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-1 rounded-md">
-                            {row.remaining} more needed
-                          </span>
-                        )}
+                      <div className="text-muted-foreground/40 text-xs">+</div>
+                      <div>
+                        <p className="text-xs font-bold tabular-nums text-foreground">{row.fromTests ?? 0}</p>
+                        <p className="text-[9px] text-muted-foreground">tests</p>
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
+
+                    {/* Progress bar */}
+                    <div className="w-28 shrink-0">
+                      <div className="flex justify-between mb-1">
+                        <span className={cn("text-[10px] font-semibold tabular-nums",
+                          row.completed ? "text-emerald-400" : "text-rose-400"
+                        )}>
+                          {row.questionsToday} / {row.target}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground">
+                          {Math.min(100, Math.round((row.questionsToday / row.target) * 100))}%
+                        </span>
+                      </div>
+                      <div className="h-2 bg-muted/60 rounded-full overflow-hidden">
+                        <div
+                          className={cn("h-full rounded-full transition-all",
+                            row.completed ? "bg-emerald-500" : row.questionsToday > 0 ? "bg-amber-400" : "bg-rose-500/50"
+                          )}
+                          style={{ width: `${Math.min(100, (row.questionsToday / row.target) * 100)}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Status badge */}
+                    <div className="w-32 shrink-0 text-right">
+                      {row.completed ? (
+                        <span className="text-[11px] font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-1 rounded-md whitespace-nowrap">
+                          ✓ Done
+                        </span>
+                      ) : row.questionsToday === 0 ? (
+                        <span className="text-[11px] font-bold text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2.5 py-1 rounded-md whitespace-nowrap">
+                          Not started
+                        </span>
+                      ) : (
+                        <span className="text-[11px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-md whitespace-nowrap">
+                          {row.remaining} more
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+
+                return (
+                  <div>
+                    {/* ── PENDING SECTION ── */}
+                    {pending.length > 0 && (
+                      <div>
+                        <div className="flex items-center gap-2 px-4 py-2 bg-rose-500/10 border-b border-rose-500/20">
+                          <XCircle className="w-3.5 h-3.5 text-rose-400" />
+                          <span className="text-xs font-bold text-rose-400 uppercase tracking-wider">
+                            Pending
+                          </span>
+                          <span className="ml-auto bg-rose-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full tabular-nums">
+                            {pending.length}
+                          </span>
+                        </div>
+                        <div className="divide-y divide-rose-500/10">
+                          {pending.map(renderRow)}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ── COMPLETED SECTION ── */}
+                    {completed.length > 0 && (
+                      <div className={cn(pending.length > 0 && "border-t-2 border-border")}>
+                        <div className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 border-b border-emerald-500/20">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                          <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">
+                            Completed
+                          </span>
+                          <span className="ml-auto bg-emerald-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full tabular-nums">
+                            {completed.length}
+                          </span>
+                        </div>
+                        <div className="divide-y divide-emerald-500/10">
+                          {completed.map(renderRow)}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           </div>
         )}
@@ -417,8 +480,19 @@ export default function AdminPanel() {
                 <Users className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
                 <p className="text-sm text-muted-foreground">No students registered yet.</p>
               </div>
-            ) : (
-              students.map((s, idx) => (
+            ) : (() => {
+              const pendingIds = new Set(dailyReport.filter(r => !r.completed).map(r => r.id));
+              const completedIds = new Set(dailyReport.filter(r => r.completed).map(r => r.id));
+              const sortedStudents = [...students].sort((a, b) => {
+                const aP = pendingIds.has(a.id) ? 0 : completedIds.has(b.id) ? 1 : 2;
+                const bP = pendingIds.has(b.id) ? 0 : completedIds.has(a.id) ? 1 : 2;
+                return aP - bP;
+              });
+              return sortedStudents.map((s, idx) => {
+                const dailyRow = dailyReport.find(r => r.id === s.id);
+                const isPending = pendingIds.has(s.id);
+                const isDone = completedIds.has(s.id);
+                return (
                 <div key={s.id} className="bg-card border border-card-border rounded-lg overflow-hidden">
                   <button
                     onClick={() => toggleStudent(s.id)}
@@ -427,11 +501,27 @@ export default function AdminPanel() {
                     <span className="text-xs font-mono text-muted-foreground w-5 shrink-0 tabular-nums">
                       {String(idx + 1).padStart(2, "0")}
                     </span>
-                    <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
-                      <span className="text-xs font-bold text-primary">{s.name[0].toUpperCase()}</span>
+                    <div className={cn("w-8 h-8 rounded-full flex items-center justify-center shrink-0",
+                      isDone ? "bg-emerald-500/20" : isPending ? "bg-rose-500/20" : "bg-primary/20"
+                    )}>
+                      <span className={cn("text-xs font-bold",
+                        isDone ? "text-emerald-400" : isPending ? "text-rose-400" : "text-primary"
+                      )}>{s.name[0].toUpperCase()}</span>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-foreground truncate">{s.name}</p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-semibold text-foreground truncate">{s.name}</p>
+                        {isDone && (
+                          <span className="text-[9px] font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/25 px-1.5 py-0.5 rounded-full">
+                            ✓ TODAY
+                          </span>
+                        )}
+                        {isPending && dailyRow && (
+                          <span className="text-[9px] font-bold text-rose-400 bg-rose-500/10 border border-rose-500/20 px-1.5 py-0.5 rounded-full">
+                            {dailyRow.questionsToday === 0 ? "NOT STARTED" : `${dailyRow.questionsToday}/${dailyRow.target}`}
+                          </span>
+                        )}
+                      </div>
                       <p className="text-[11px] text-muted-foreground flex items-center gap-1">
                         <Phone className="w-2.5 h-2.5" />{s.phone}
                       </p>
@@ -508,8 +598,9 @@ export default function AdminPanel() {
                     </div>
                   )}
                 </div>
-              ))
-            )}
+              );
+              });
+            })()}
           </div>
         )}
 
