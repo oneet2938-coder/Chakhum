@@ -60,7 +60,31 @@ interface LeaderboardRow {
   position: number;
 }
 
-type Tab = "daily" | "students" | "overview" | "leaderboard";
+interface TopStudentTopic {
+  topicName: string;
+  total: number;
+  correct: number;
+  accuracy: number;
+}
+
+interface TopStudentData {
+  id: number;
+  name: string;
+  phone: string;
+  totalQuestions: number;
+  diamonds: number;
+  activeDays: number;
+  avgPerDay: number;
+  testCount: number;
+  avgScore: number;
+  bestScore: number;
+  topicStats: TopStudentTopic[];
+  weakTopics: TopStudentTopic[];
+  strongTopics: TopStudentTopic[];
+  recentActivity: { date: string; count: number }[];
+}
+
+type Tab = "daily" | "students" | "overview" | "leaderboard" | "topstudents";
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
@@ -100,6 +124,10 @@ export default function AdminPanel() {
   const [leaderboard, setLeaderboard] = useState<LeaderboardRow[]>([]);
   const [lbLoading, setLbLoading] = useState(false);
 
+  // Top Students
+  const [topStudents, setTopStudents] = useState<TopStudentData[]>([]);
+  const [tsLoading, setTsLoading] = useState(false);
+
   const fetchDailyReport = useCallback(async () => {
     setReportLoading(true);
     const data = await fetch("/api/admin/daily-report").then((r) => r.json());
@@ -127,6 +155,15 @@ export default function AdminPanel() {
     fetch("/api/leaderboard").then((r) => r.json()).then((d) => {
       setLeaderboard(d);
       setLbLoading(false);
+    });
+  }, [tab]);
+
+  useEffect(() => {
+    if (tab !== "topstudents") return;
+    setTsLoading(true);
+    fetch("/api/admin/top-students").then((r) => r.json()).then((d) => {
+      setTopStudents(d);
+      setTsLoading(false);
     });
   }, [tab]);
 
@@ -226,7 +263,7 @@ export default function AdminPanel() {
 
         {/* ── Tabs ── */}
         <div className="flex gap-1 bg-muted/40 border border-border rounded-lg p-1 w-fit flex-wrap">
-          {([ ["daily", "Daily Report"], ["students", "All Students"], ["overview", "Overview"], ["leaderboard", "💎 Leaderboard"] ] as [Tab, string][]).map(([id, label]) => (
+          {([ ["daily", "Daily Report"], ["students", "All Students"], ["overview", "Overview"], ["leaderboard", "💎 Leaderboard"], ["topstudents", "🏅 Top Students"] ] as [Tab, string][]).map(([id, label]) => (
             <button
               key={id}
               onClick={() => setTab(id)}
@@ -235,7 +272,8 @@ export default function AdminPanel() {
                 tab === id
                   ? "bg-card text-foreground shadow-sm border border-border"
                   : "text-muted-foreground hover:text-foreground",
-                id === "leaderboard" && tab !== "leaderboard" && "text-yellow-500/80 hover:text-yellow-400"
+                id === "leaderboard" && tab !== "leaderboard" && "text-yellow-500/80 hover:text-yellow-400",
+                id === "topstudents" && tab !== "topstudents" && "text-orange-400/80 hover:text-orange-400"
               )}
             >
               {label}
@@ -655,6 +693,177 @@ export default function AdminPanel() {
                 ))}
               </div>
             </div>
+          </div>
+        )}
+
+        {/* ── Top Students Tab ── */}
+        {tab === "topstudents" && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-bold text-foreground">Top 5 Students</h2>
+                <p className="text-xs text-muted-foreground mt-0.5">Ranked by diamonds earned · detailed topic & activity breakdown</p>
+              </div>
+              <button
+                onClick={() => { setTsLoading(true); fetch("/api/admin/top-students").then(r => r.json()).then(d => { setTopStudents(d); setTsLoading(false); }); }}
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <RefreshCw className={cn("w-3.5 h-3.5", tsLoading && "animate-spin")} />
+                Refresh
+              </button>
+            </div>
+
+            {tsLoading ? (
+              <div className="space-y-3">
+                {[...Array(3)].map((_, i) => <div key={i} className="h-48 bg-muted/30 animate-pulse rounded-xl" />)}
+              </div>
+            ) : topStudents.length === 0 ? (
+              <div className="py-16 text-center bg-card border border-card-border rounded-xl">
+                <Users className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground">No student data yet.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {topStudents.map((s, idx) => {
+                  const medal = idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : `#${idx + 1}`;
+                  const maxActivity = Math.max(...s.recentActivity.map(r => r.count), 1);
+                  return (
+                    <div key={s.id} className="bg-card border border-card-border rounded-xl overflow-hidden">
+                      {/* Card header */}
+                      <div className="flex items-center gap-3 px-5 py-4 border-b border-border bg-muted/20">
+                        <span className="text-2xl leading-none">{medal}</span>
+                        <div className="w-9 h-9 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
+                          <span className="text-sm font-bold text-primary">{s.name[0].toUpperCase()}</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-bold text-foreground">{s.name}</p>
+                          <p className="text-xs text-muted-foreground">{s.phone}</p>
+                        </div>
+                        {/* Key stats in header */}
+                        <div className="flex items-center gap-4 shrink-0 flex-wrap">
+                          <div className="text-center">
+                            <div className="flex items-center gap-1 justify-center">
+                              <span className="text-base">💎</span>
+                              <span className="text-lg font-bold tabular-nums text-cyan-300">{s.diamonds}</span>
+                            </div>
+                            <p className="text-[9px] text-muted-foreground">diamonds</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-lg font-bold tabular-nums text-foreground">{s.totalQuestions}</p>
+                            <p className="text-[9px] text-muted-foreground">unique Qs</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-lg font-bold tabular-nums text-emerald-400">{s.avgPerDay}</p>
+                            <p className="text-[9px] text-muted-foreground">avg / day</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-lg font-bold tabular-nums text-purple-300">{s.testCount}</p>
+                            <p className="text-[9px] text-muted-foreground">tests taken</p>
+                          </div>
+                          {s.testCount > 0 && (
+                            <div className="text-center">
+                              <p className="text-lg font-bold tabular-nums text-amber-300">{s.avgScore}%</p>
+                              <p className="text-[9px] text-muted-foreground">avg score</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-border">
+
+                        {/* Activity chart — last 14 days */}
+                        <div className="p-4">
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Last 14 Days</p>
+                          <div className="flex items-end gap-1 h-12">
+                            {s.recentActivity.map((day) => {
+                              const pct = maxActivity > 0 ? (day.count / maxActivity) * 100 : 0;
+                              const isToday = day.date === new Date().toISOString().split("T")[0];
+                              return (
+                                <div key={day.date} className="flex-1 flex flex-col items-center gap-0.5 group relative" title={`${day.date}: ${day.count} questions`}>
+                                  <div className="w-full rounded-t-sm transition-all" style={{ height: `${Math.max(pct, day.count > 0 ? 8 : 2)}%` }}>
+                                    <div className={cn(
+                                      "w-full h-full rounded-t-sm",
+                                      day.count === 0 ? "bg-muted/40" : isToday ? "bg-primary" : "bg-primary/50"
+                                    )} />
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <div className="flex justify-between mt-1">
+                            <span className="text-[9px] text-muted-foreground">14d ago</span>
+                            <span className="text-[9px] text-muted-foreground">Today</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-2">
+                            Active <span className="text-foreground font-semibold">{s.activeDays}</span> day{s.activeDays !== 1 ? "s" : ""}
+                            {s.bestScore > 0 && <> · Best score <span className="text-amber-300 font-semibold">{s.bestScore}%</span></>}
+                          </p>
+                        </div>
+
+                        {/* Weak topics */}
+                        <div className="p-4">
+                          <p className="text-xs font-semibold text-rose-400/80 uppercase tracking-wider mb-3">Weak Chapters</p>
+                          {s.weakTopics.length === 0 ? (
+                            <p className="text-xs text-muted-foreground italic">No weak areas detected yet.</p>
+                          ) : (
+                            <div className="space-y-2">
+                              {s.weakTopics.map((t) => (
+                                <div key={t.topicName}>
+                                  <div className="flex items-center justify-between mb-0.5">
+                                    <span className="text-xs text-foreground truncate flex-1 pr-2">{t.topicName}</span>
+                                    <span className="text-xs font-bold text-rose-400 shrink-0">{t.accuracy}%</span>
+                                  </div>
+                                  <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+                                    <div className="h-full bg-rose-500/70 rounded-full" style={{ width: `${t.accuracy}%` }} />
+                                  </div>
+                                  <p className="text-[9px] text-muted-foreground mt-0.5">{t.correct}/{t.total} correct</p>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Strong topics + top topics */}
+                        <div className="p-4">
+                          <p className="text-xs font-semibold text-emerald-400/80 uppercase tracking-wider mb-3">Strong Chapters</p>
+                          {s.strongTopics.length === 0 ? (
+                            <p className="text-xs text-muted-foreground italic">Keep practicing to unlock strengths.</p>
+                          ) : (
+                            <div className="space-y-2">
+                              {s.strongTopics.map((t) => (
+                                <div key={t.topicName}>
+                                  <div className="flex items-center justify-between mb-0.5">
+                                    <span className="text-xs text-foreground truncate flex-1 pr-2">{t.topicName}</span>
+                                    <span className="text-xs font-bold text-emerald-400 shrink-0">{t.accuracy}%</span>
+                                  </div>
+                                  <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+                                    <div className="h-full bg-emerald-500/60 rounded-full" style={{ width: `${t.accuracy}%` }} />
+                                  </div>
+                                  <p className="text-[9px] text-muted-foreground mt-0.5">{t.correct}/{t.total} correct</p>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {/* Most practiced topic tags */}
+                          {s.topicStats.length > 0 && (
+                            <div className="mt-3">
+                              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5">Most Practiced</p>
+                              <div className="flex flex-wrap gap-1">
+                                {s.topicStats.slice(0, 4).map((t) => (
+                                  <span key={t.topicName} className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-primary/80">
+                                    {t.topicName} ({t.total})
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 

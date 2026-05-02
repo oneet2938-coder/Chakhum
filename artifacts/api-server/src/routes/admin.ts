@@ -209,4 +209,137 @@ router.get("/admin/overview", async (_req, res) => {
   });
 });
 
+// ── Top 5 Students detailed report ────────────────────────────────────────────
+router.get("/admin/top-students", async (_req, res) => {
+  const [setting] = await db.select().from(settingsTable).where(eq(settingsTable.key, "daily_practice_target"));
+  const target = parseInt(setting?.value ?? "20");
+
+  const students = await db.select().from(studentsTable).orderBy(studentsTable.createdAt);
+
+  // Gather gamification stats for every student to pick the top 5
+  const allStats = await Promise.all(
+    students.map(async (s) => {
+      const practiceRows = await db
+        .select({
+          day: sql<string>`DATE(${practiceAnswersTable.answeredAt} AT TIME ZONE 'UTC')::text`,
+          questionId: practiceAnswersTable.questionId,
+        })
+        .from(practiceAnswersTable)
+        .where(eq(practiceAnswersTable.studentId, s.id));
+
+      const testRows = await db
+        .select({
+          day: sql<string>`DATE(${attemptsTable.completedAt} AT TIME ZONE 'UTC')::text`,
+          questionId: attemptAnswersTable.questionId,
+        })
+        .from(attemptAnswersTable)
+        .innerJoin(attemptsTable, eq(attemptAnswersTable.attemptId, attemptsTable.id))
+        .where(sql`${attemptsTable.studentId} = ${s.id}`);
+
+      const dayQs: Record<string, Set<number>> = {};
+      const allQs = new Set<number>();
+      for (const r of practiceRows) { (dayQs[r.day] ??= new Set()).add(r.questionId); allQs.add(r.questionId); }
+      for (const r of testRows)     { (dayQs[r.day] ??= new Set()).add(r.questionId); allQs.add(r.questionId); }
+
+      return {
+        ...s,
+        totalQuestions: allQs.size,
+        diamonds: Object.values(dayQs).filter((set) => set.size >= target).length,
+        dayQs,
+      };
+    })
+  );
+
+  allStats.sort((a, b) => b.diamonds - a.diamonds || b.totalQuestions - a.totalQuestions);
+  const top5 = allStats.slice(0, 5);
+
+  const detailed = await Promise.all(
+    top5.map(async (s) => {
+      // Topic accuracy — practice answers
+      const practiceAnswers = await db
+        .select({
+          questionId: practiceAnswersTable.questionId,
+          isCorrect: practiceAnswersTable.isCorrect,
+          topicName: topicsTable.name,
+        })
+        .from(practiceAnswersTable)
+        .innerJoin(questionsTable, eq(practiceAnswersTable.questionId, questionsTable.id))
+        .innerJoin(topicsTable, eq(questionsTable.topicId, topicsTable.id))
+        .where(eq(practiceAnswersTable.studentId, s.id));
+
+      // Topic accuracy — test answers
+      const testAnswers = await db
+        .select({
+          questionId: attemptAnswersTable.questionId,
+          isCorrect: attemptAnswersTable.isCorrect,
+          topicName: topicsTable.name,
+        })
+        .from(attemptAnswersTable)
+        .innerJoin(attemptsTable, eq(attemptAnswersTable.attemptId, attemptsTable.id))
+        .innerJoin(questionsTable, eq(attemptAnswersTable.questionId, questionsTable.id))
+        .innerJoin(topicsTable, eq(questionsTable.topicId, topicsTable.id))
+        .where(sql`${attemptsTable.studentId} = ${s.id}`);
+
+      // Per topic: track each distinct questionId; mark correct if EVER answered correctly
+      const topicData: Record<string, Map<number, boolean>> = {};
+      for (const r of [...practiceAnswers, ...testAnswers]) {
+        (topicData[r.topicName] ??= new Map()).set(
+          r.questionId,
+          r.isCorrect || (topicData[r.topicName].get(r.questionId) ?? false)
+        );
+      }
+
+      const topicStats = Object.entries(topicData)
+        .map(([topicName, qMap]) => {
+          const total   = qMap.size;
+          const correct = [...qMap.values()].filter(Boolean).length;
+          const accuracy = total > 0 ? Math.round((correct / total) * 100) : 0;
+          return { topicName, total, correct, accuracy };
+        })
+        .sort((a, b) => b.total - a.total);
+
+      // Last 14 days activity
+      const recentActivity: { date: string; count: number }[] = [];
+      for (let i = 13; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const dateStr = d.toISOString().split("T")[0];
+        recentActivity.push({ date: dateStr, count: s.dayQs[dateStr]?.size ?? 0 });
+      }
+
+      const activeDays   = Object.keys(s.dayQs).length;
+      const avgPerDay    = activeDays > 0 ? Math.round(s.totalQuestions / activeDays) : 0;
+
+      // Test performance
+      const [testStats] = await db
+        .select({
+          avgScore:  sql<number>`round(coalesce(avg(${attemptsTable.score}), 0))::int`,
+          testCount: sql<number>`count(*)::int`,
+          bestScore: sql<number>`coalesce(max(${attemptsTable.score}), 0)::int`,
+        })
+        .from(attemptsTable)
+        .where(eq(attemptsTable.studentId, s.id));
+
+      return {
+        id:          s.id,
+        name:        s.name,
+        phone:       s.phone,
+        totalQuestions: s.totalQuestions,
+        diamonds:    s.diamonds,
+        activeDays,
+        avgPerDay,
+        testCount:   testStats?.testCount  ?? 0,
+        avgScore:    testStats?.avgScore   ?? 0,
+        bestScore:   testStats?.bestScore  ?? 0,
+        topicStats:  topicStats.slice(0, 10),
+        weakTopics:  topicStats.filter((t) => t.total >= 2 && t.accuracy < 50).slice(0, 5),
+        strongTopics: topicStats.filter((t) => t.total >= 2 && t.accuracy >= 80).slice(0, 4),
+        recentActivity,
+      };
+    })
+  );
+
+  res.json(detailed);
+});
+
 export default router;
