@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import {
   Users, TrendingUp, ClipboardList, ChevronDown, ChevronUp,
   LogOut, Phone, CheckCircle2, XCircle, Target, Settings, Save,
-  RefreshCw, Trophy, ShieldCheck, ShieldX, Clock, IndianRupee, ArrowLeftRight,
+  RefreshCw, Trophy, ShieldCheck, ShieldX, Clock, IndianRupee, ArrowLeftRight, Trash2,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
@@ -148,6 +148,10 @@ export default function AdminPanel() {
   // Course type switching
   const [courseTypeLoading, setCourseTypeLoading] = useState<Record<number, boolean>>({});
 
+  // Delete student
+  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState<Record<number, boolean>>({});
+
   const fetchApprovals = useCallback(async () => {
     setApprovalsLoading(true);
     const data = await fetch("/api/admin/approvals").then((r) => r.json());
@@ -224,6 +228,16 @@ export default function AdminPanel() {
     setTargetSaved(true);
     setTimeout(() => setTargetSaved(false), 2000);
     fetchDailyReport();
+  }
+
+  async function deleteStudent(id: number) {
+    setDeleteLoading((p) => ({ ...p, [id]: true }));
+    await fetch(`/api/admin/students/${id}`, { method: "DELETE" });
+    setStudents((prev) => prev.filter((s) => s.id !== id));
+    setDeleteConfirm(null);
+    setDeleteLoading((p) => ({ ...p, [id]: false }));
+    // Also remove from daily report
+    setDailyReport((prev) => prev.filter((r) => r.id !== id));
   }
 
   async function switchCourseType(id: number, currentType: string) {
@@ -675,9 +689,9 @@ export default function AdminPanel() {
                 const isDone = completedIds.has(s.id);
                 return (
                 <div key={s.id} className="bg-card border border-card-border rounded-lg overflow-hidden">
-                  <button
+                  <div
                     onClick={() => toggleStudent(s.id)}
-                    className="w-full flex items-center gap-4 px-4 py-3 hover:bg-muted/30 transition-colors text-left"
+                    className="w-full flex items-center gap-4 px-4 py-3 hover:bg-muted/30 transition-colors cursor-pointer"
                   >
                     <span className="text-xs font-mono text-muted-foreground w-5 shrink-0 tabular-nums">
                       {String(idx + 1).padStart(2, "0")}
@@ -710,6 +724,32 @@ export default function AdminPanel() {
                           <ArrowLeftRight className="w-2.5 h-2.5" />
                           {courseTypeLoading[s.id] ? "…" : s.courseType === "test_only" ? "→ Foundation" : "→ Test Series"}
                         </button>
+                        {deleteConfirm === s.id ? (
+                          <span className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                            <span className="text-[9px] text-rose-400 font-bold">Remove?</span>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); deleteStudent(s.id); }}
+                              disabled={deleteLoading[s.id]}
+                              className="text-[9px] font-black text-white bg-rose-500 px-1.5 py-0.5 rounded border border-rose-500 hover:bg-rose-600 transition-all disabled:opacity-50"
+                            >
+                              {deleteLoading[s.id] ? "…" : "Yes"}
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setDeleteConfirm(null); }}
+                              className="text-[9px] font-bold text-muted-foreground border border-border px-1.5 py-0.5 rounded hover:text-foreground transition-all"
+                            >
+                              No
+                            </button>
+                          </span>
+                        ) : (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setDeleteConfirm(s.id); }}
+                            title="Remove student"
+                            className="shrink-0 p-1 rounded text-muted-foreground/50 hover:text-rose-400 hover:bg-rose-500/10 border border-transparent hover:border-rose-500/20 transition-all"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        )}
                         {isDone && (
                           <span className="text-[9px] font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/25 px-1.5 py-0.5 rounded-full">
                             ✓ TODAY
@@ -755,7 +795,7 @@ export default function AdminPanel() {
                       ? <ChevronUp className="w-4 h-4 text-muted-foreground shrink-0" />
                       : <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
                     }
-                  </button>
+                  </div>
 
                   {expanded === s.id && (
                     <div className="border-t border-border px-4 py-3">

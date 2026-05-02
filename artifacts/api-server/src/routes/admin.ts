@@ -10,7 +10,7 @@ import {
   settingsTable,
   practiceAnswersTable,
 } from "@workspace/db";
-import { eq, sql, isNotNull } from "drizzle-orm";
+import { eq, sql, isNotNull, inArray } from "drizzle-orm";
 
 const router = Router();
 
@@ -381,6 +381,25 @@ router.put("/admin/students/:id/reject", async (req, res) => {
     .returning();
   if (!updated) return res.status(404).json({ error: "student not found" });
   res.json(updated);
+});
+
+router.delete("/admin/students/:id", async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) return res.status(400).json({ error: "invalid id" });
+  // cascade: attempt_answers → attempts → student; practice_answers → student
+  const studentAttempts = await db
+    .select({ id: attemptsTable.id })
+    .from(attemptsTable)
+    .where(eq(attemptsTable.studentId, id));
+  const attemptIds = studentAttempts.map((a) => a.id);
+  if (attemptIds.length > 0) {
+    await db.delete(attemptAnswersTable).where(inArray(attemptAnswersTable.attemptId, attemptIds));
+    await db.delete(attemptsTable).where(eq(attemptsTable.studentId, id));
+  }
+  await db.delete(practiceAnswersTable).where(eq(practiceAnswersTable.studentId, id));
+  const [deleted] = await db.delete(studentsTable).where(eq(studentsTable.id, id)).returning();
+  if (!deleted) return res.status(404).json({ error: "student not found" });
+  res.json({ ok: true });
 });
 
 router.put("/admin/students/:id/course-type", async (req, res) => {
