@@ -1,19 +1,11 @@
-import { useState, useEffect } from "react";
 import { useGetProgressSummary, useGetTopicProgress, useListAttempts } from "@workspace/api-client-react";
 import { TrendingUp, Target, BookCheck, ChevronRight, Award, AlertTriangle, Trophy } from "lucide-react";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
-import { getRankForQuestions, RANKS } from "@/lib/ranks";
-
-interface GamificationData {
-  totalQuestions: number;
-  diamonds: number;
-  rank: typeof RANKS[number];
-  next: typeof RANKS[number] | null;
-  progressToNext: number;
-  target: number;
-}
+import { useGamification } from "@/hooks/useGamification";
+import RankBadge, { RankIcon } from "@/components/RankBadge";
+import NeetCountdown from "@/components/NeetCountdown";
 
 function StatCard({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color?: string }) {
   return (
@@ -30,20 +22,7 @@ export default function Dashboard() {
   const { data: summary, isLoading: sumLoading } = useGetProgressSummary();
   const { data: topicProgress } = useGetTopicProgress();
   const { data: attempts } = useListAttempts();
-  const [gamification, setGamification] = useState<GamificationData | null>(null);
-
-  useEffect(() => {
-    if (user?.role !== "student") return;
-    const studentId = (user as any).studentId;
-    fetch("/api/gamification/me", {
-      headers: { "X-Student-ID": String(studentId) },
-    })
-      .then((r) => r.json())
-      .then((d) => {
-        const { rank, next, progressToNext } = getRankForQuestions(d.totalQuestions);
-        setGamification({ ...d, rank, next, progressToNext });
-      });
-  }, [user]);
+  const { stats: gamification } = useGamification();
 
   if (sumLoading) {
     return (
@@ -60,10 +39,10 @@ export default function Dashboard() {
 
   const recentAttempts = (attempts ?? []).slice(-5).reverse();
   const sortedTopics = [...(topicProgress ?? [])].sort((a, b) => b.questionsAttempted - a.questionsAttempted);
-  const diamondsToGo = 365 - (gamification?.diamonds ?? 0);
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-5">
+      {/* Header */}
       <div>
         <h1 className="text-xl font-bold text-foreground">
           Welcome back, {user?.name?.split(" ")[0]}!
@@ -71,9 +50,13 @@ export default function Dashboard() {
         <p className="text-sm text-muted-foreground mt-0.5">Your NEET Physics progress at a glance</p>
       </div>
 
-      {/* ── Gamification hero ── */}
+      {/* NEET 2027 Countdown */}
+      <NeetCountdown />
+
+      {/* Gamification hero */}
       {gamification && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+
           {/* Diamond card */}
           <div className="bg-gradient-to-br from-cyan-500/15 to-blue-500/5 border border-cyan-500/25 rounded-xl p-4">
             <div className="flex items-center gap-2 mb-3">
@@ -82,11 +65,10 @@ export default function Dashboard() {
             </div>
             <p className="text-4xl font-bold text-cyan-300 tabular-nums mb-1">{gamification.diamonds}</p>
             <p className="text-xs text-muted-foreground mb-3">
-              {diamondsToGo > 0
-                ? `${diamondsToGo} more to complete the 365-day challenge`
+              {365 - gamification.diamonds > 0
+                ? `${365 - gamification.diamonds} more to complete the 365-day challenge`
                 : "🎉 365-day challenge complete!"}
             </p>
-            {/* 365 progress bar */}
             <div>
               <div className="flex justify-between mb-1">
                 <span className="text-[10px] text-muted-foreground">365-day progress</span>
@@ -104,42 +86,49 @@ export default function Dashboard() {
           </div>
 
           {/* Rank card */}
-          <div className={cn(
-            "border rounded-xl p-4",
-            gamification.rank.bg, gamification.rank.border
-          )}>
-            <div className="flex items-center gap-2 mb-3">
-              <span className="text-lg">{gamification.rank.icon}</span>
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Medical Rank</p>
+          <div className={cn("border rounded-xl p-4", gamification.rank.bg, gamification.rank.border)}>
+            <div className="flex items-center gap-2.5 mb-3">
+              <RankIcon rank={gamification.rank} size="md" />
+              <div>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Medical Rank</p>
+                <p className={cn("text-sm font-bold leading-tight", gamification.rank.color)}>
+                  {gamification.rank.title}
+                </p>
+              </div>
+              <span className={cn(
+                "ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded border",
+                gamification.rank.color, gamification.rank.bg, gamification.rank.border
+              )}>
+                Lv.{gamification.rank.level}
+              </span>
             </div>
-            <p className={cn("text-2xl font-bold mb-0.5", gamification.rank.color)}>
-              {gamification.rank.title}
-            </p>
+
             <p className="text-xs text-muted-foreground mb-3">
-              Rank {gamification.rank.level} of 10 · {gamification.totalQuestions} questions answered
+              {gamification.totalQuestions} questions answered · Rank {gamification.rank.level} of 10
             </p>
+
             {gamification.next ? (
               <div>
                 <div className="flex justify-between mb-1">
-                  <span className="text-[10px] text-muted-foreground">→ {gamification.next.title}</span>
+                  <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                    → <RankBadge rank={gamification.next} size="xs" />
+                  </span>
                   <span className={cn("text-[10px] font-semibold", gamification.rank.color)}>
                     {gamification.progressToNext}%
                   </span>
                 </div>
                 <div className="h-1.5 bg-muted/50 rounded-full overflow-hidden">
                   <div
-                    className={cn("h-full rounded-full", gamification.rank.color.replace("text-", "bg-").replace("-400", "-500").replace("-300", "-400"))}
+                    className={cn("h-full rounded-full bg-gradient-to-r", gamification.rank.gradientFrom, gamification.rank.gradientTo)}
                     style={{ width: `${gamification.progressToNext}%` }}
                   />
                 </div>
                 <p className="text-[10px] text-muted-foreground mt-1">
-                  {Math.max(0, gamification.next.minQ - gamification.totalQuestions)} more questions to next rank
+                  {Math.max(0, gamification.next.minQ - gamification.totalQuestions)} more questions needed
                 </p>
               </div>
             ) : (
-              <p className={cn("text-xs font-semibold", gamification.rank.color)}>
-                ⭐ Maximum rank achieved!
-              </p>
+              <p className={cn("text-xs font-semibold", gamification.rank.color)}>⭐ Maximum rank achieved!</p>
             )}
           </div>
 
@@ -149,7 +138,7 @@ export default function Dashboard() {
               <Target className="w-4 h-4 text-primary" />
               <p className="text-xs font-semibold text-primary uppercase tracking-wider">Today's Challenge</p>
             </div>
-            <p className="text-xs text-muted-foreground mb-3">
+            <p className="text-xs text-muted-foreground mb-4">
               Answer <span className="text-foreground font-semibold">{gamification.target} questions</span> today to earn a 💎 diamond!
             </p>
             <Link
@@ -168,7 +157,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* ── Stats row ── */}
+      {/* Stats row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard
           label="Accuracy"

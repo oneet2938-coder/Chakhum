@@ -6,7 +6,8 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
-import { getRankForQuestions } from "@/lib/ranks";
+import { getRankForQuestions, RANKS } from "@/lib/ranks";
+import RankBadge, { RankIcon } from "@/components/RankBadge";
 
 interface StudentStat {
   id: number;
@@ -591,29 +592,27 @@ export default function AdminPanel() {
                     const { rank, next, progressToNext } = getRankForQuestions(row.totalQuestions);
                     return (
                       <div key={row.id} className="flex items-center gap-3 px-4 py-3 hover:bg-muted/20 transition-colors">
-                        <div className="w-8 text-center text-sm shrink-0">{posLabel}</div>
-                        <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
-                          <span className="text-xs font-bold text-primary">{row.name[0].toUpperCase()}</span>
-                        </div>
+                        {/* Position */}
+                        <div className="w-7 text-center text-sm shrink-0 font-bold">{posLabel}</div>
+
+                        {/* Rank icon */}
+                        <RankIcon rank={rank} size="sm" />
+
+                        {/* Name + badge + progress */}
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
+                          <div className="flex items-center gap-2 flex-wrap mb-0.5">
                             <p className="text-sm font-semibold text-foreground truncate">{row.name}</p>
-                            <span className={cn(
-                              "text-[10px] px-1.5 py-0.5 rounded-full border font-semibold shrink-0",
-                              rank.color, rank.bg, rank.border
-                            )}>
-                              {rank.icon} {rank.title}
-                            </span>
+                            <RankBadge rank={rank} size="xs" />
                           </div>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <Phone className="w-2.5 h-2.5 text-muted-foreground" />
-                            <span className="text-[10px] text-muted-foreground">{row.phone}</span>
+                          <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                            <Phone className="w-2.5 h-2.5 shrink-0" />
+                            <span>{row.phone}</span>
                           </div>
                           {next && (
                             <div className="mt-1 flex items-center gap-1.5">
                               <div className="w-20 h-1 bg-muted rounded-full overflow-hidden">
                                 <div
-                                  className={cn("h-full rounded-full", rank.color.replace("text-", "bg-").replace("-400", "-500").replace("-300", "-400"))}
+                                  className={cn("h-full rounded-full bg-gradient-to-r", rank.gradientFrom, rank.gradientTo)}
                                   style={{ width: `${progressToNext}%` }}
                                 />
                               </div>
@@ -621,6 +620,8 @@ export default function AdminPanel() {
                             </div>
                           )}
                         </div>
+
+                        {/* Diamonds */}
                         <div className="text-center shrink-0 w-16">
                           <div className="flex items-center gap-1 justify-center">
                             <span className="text-base">💎</span>
@@ -628,6 +629,8 @@ export default function AdminPanel() {
                           </div>
                           <p className="text-[9px] text-muted-foreground">diamonds</p>
                         </div>
+
+                        {/* Questions */}
                         <div className="text-center shrink-0 w-14">
                           <p className="text-sm font-bold tabular-nums text-foreground">{row.totalQuestions}</p>
                           <p className="text-[9px] text-muted-foreground">questions</p>
@@ -643,22 +646,11 @@ export default function AdminPanel() {
             <div className="bg-card border border-card-border rounded-xl p-4">
               <h3 className="text-sm font-semibold text-foreground mb-3">Medical Rank System</h3>
               <div className="grid grid-cols-5 gap-2">
-                {[
-                  { level: 1,  title: "Intern",            minQ: 0,     icon: "🩺" },
-                  { level: 2,  title: "Medical Student",   minQ: 50,    icon: "📚" },
-                  { level: 3,  title: "House Surgeon",     minQ: 150,   icon: "✂️" },
-                  { level: 4,  title: "Junior Resident",   minQ: 350,   icon: "🏥" },
-                  { level: 5,  title: "Senior Resident",   minQ: 700,   icon: "💊" },
-                  { level: 6,  title: "Registrar",         minQ: 1200,  icon: "🔬" },
-                  { level: 7,  title: "Specialist",        minQ: 2000,  icon: "🧬" },
-                  { level: 8,  title: "Consultant",        minQ: 3500,  icon: "👨‍⚕️" },
-                  { level: 9,  title: "Senior Consultant", minQ: 5500,  icon: "🏆" },
-                  { level: 10, title: "Chief Physician",   minQ: 10000, icon: "⭐" },
-                ].map((r) => (
-                  <div key={r.level} className="bg-muted/30 rounded-lg px-2 py-2 text-center">
-                    <div className="text-base mb-0.5">{r.icon}</div>
-                    <p className="text-[10px] font-semibold text-foreground leading-tight">{r.title}</p>
-                    <p className="text-[9px] text-muted-foreground">{r.minQ === 0 ? "Start" : `${r.minQ}+ Qs`}</p>
+                {RANKS.map((r) => (
+                  <div key={r.level} className={cn("rounded-lg px-2 py-3 text-center border", r.bg, r.border)}>
+                    <RankIcon rank={r} size="sm" className="mx-auto mb-1.5" />
+                    <p className={cn("text-[10px] font-bold leading-tight", r.color)}>{r.title}</p>
+                    <p className="text-[9px] text-muted-foreground mt-0.5">{r.minQ === 0 ? "Start" : `${r.minQ}+ Qs`}</p>
                   </div>
                 ))}
               </div>
