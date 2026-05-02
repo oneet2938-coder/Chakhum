@@ -16,7 +16,7 @@ router.post("/students/login", async (req, res) => {
 
   const [student] = await db
     .insert(studentsTable)
-    .values({ name, phone })
+    .values({ name, phone, status: "pending" })
     .returning();
 
   return res.status(201).json(student);

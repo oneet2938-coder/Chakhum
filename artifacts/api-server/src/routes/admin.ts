@@ -342,4 +342,39 @@ router.get("/admin/top-students", async (_req, res) => {
   res.json(detailed);
 });
 
+// ── Student Approvals ─────────────────────────────────────────────────────────
+
+router.get("/admin/approvals", async (_req, res) => {
+  const rows = await db
+    .select()
+    .from(studentsTable)
+    .where(eq(studentsTable.status, "pending"))
+    .orderBy(studentsTable.createdAt);
+  res.json(rows.map((s) => ({ ...s, createdAt: s.createdAt.toISOString() })));
+});
+
+router.put("/admin/students/:id/approve", async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) return res.status(400).json({ error: "invalid id" });
+  const [updated] = await db
+    .update(studentsTable)
+    .set({ status: "approved" })
+    .where(eq(studentsTable.id, id))
+    .returning();
+  if (!updated) return res.status(404).json({ error: "student not found" });
+  res.json(updated);
+});
+
+router.put("/admin/students/:id/reject", async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) return res.status(400).json({ error: "invalid id" });
+  const [updated] = await db
+    .update(studentsTable)
+    .set({ status: "rejected" })
+    .where(eq(studentsTable.id, id))
+    .returning();
+  if (!updated) return res.status(404).json({ error: "student not found" });
+  res.json(updated);
+});
+
 export default router;

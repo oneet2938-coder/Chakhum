@@ -6,6 +6,7 @@ import { AuthProvider, useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import LoginScreen from "@/pages/LoginScreen";
 import AdminPanel from "@/pages/AdminPanel";
+import PendingApprovalScreen from "@/pages/PendingApprovalScreen";
 import Dashboard from "@/pages/Dashboard";
 import Topics from "@/pages/Topics";
 import TopicDetail from "@/pages/TopicDetail";
@@ -43,6 +44,9 @@ function AppRouter() {
 
   if (!user) return <LoginScreen />;
   if (user.role === "teacher") return <AdminPanel />;
+
+  if (user.status === "pending") return <PendingApprovalScreen />;
+  if (user.status === "rejected") return <PendingApprovalScreen rejected />;
 
   return (
     <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>

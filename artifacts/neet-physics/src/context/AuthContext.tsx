@@ -1,13 +1,15 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
 import { setExtraHeader, clearExtraHeaders } from "@workspace/api-client-react";
 
 export type Role = "student" | "teacher";
+export type StudentStatus = "pending" | "approved" | "rejected";
 
 export interface StudentUser {
   role: "student";
   name: string;
   phone: string;
   studentId: number;
+  status: StudentStatus;
 }
 
 export interface TeacherUser {
@@ -21,12 +23,14 @@ interface AuthContextValue {
   user: AuthUser | null;
   login: (user: AuthUser) => void;
   logout: () => void;
+  refreshStatus: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue>({
   user: null,
   login: () => {},
   logout: () => {},
+  refreshStatus: async () => {},
 });
 
 const STORAGE_KEY = "emc_session";
@@ -63,8 +67,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }
 
+  const refreshStatus = useCallback(async () => {
+    if (!user || user.role !== "student") return;
+    try {
+      const res = await fetch("/api/students/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: user.name, phone: user.phone }),
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const updated: StudentUser = { ...user, status: data.status };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      setUser(updated);
+    } catch {
+    }
+  }, [user]);
+
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthContext.Provider value={{ user, login, logout, refreshStatus }}>
       {children}
     </AuthContext.Provider>
   );

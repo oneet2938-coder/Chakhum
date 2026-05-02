@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import {
   Users, TrendingUp, ClipboardList, ChevronDown, ChevronUp,
   LogOut, Phone, CheckCircle2, XCircle, Target, Settings, Save,
-  RefreshCw, Trophy,
+  RefreshCw, Trophy, ShieldCheck, ShieldX, Clock, IndianRupee,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
@@ -85,7 +85,15 @@ interface TopStudentData {
   recentActivity: { date: string; count: number }[];
 }
 
-type Tab = "daily" | "students" | "overview" | "leaderboard" | "topstudents";
+interface PendingStudent {
+  id: number;
+  name: string;
+  phone: string;
+  status: string;
+  createdAt: string;
+}
+
+type Tab = "approvals" | "daily" | "students" | "overview" | "leaderboard" | "topstudents";
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
@@ -99,7 +107,7 @@ function formatTime(secs: number) {
 
 export default function AdminPanel() {
   const { user, logout } = useAuth();
-  const [tab, setTab] = useState<Tab>("daily");
+  const [tab, setTab] = useState<Tab>("approvals");
 
   // Settings
   const [target, setTarget] = useState(20);
@@ -129,6 +137,18 @@ export default function AdminPanel() {
   const [topStudents, setTopStudents] = useState<TopStudentData[]>([]);
   const [tsLoading, setTsLoading] = useState(false);
 
+  // Approvals
+  const [pendingStudents, setPendingStudents] = useState<PendingStudent[]>([]);
+  const [approvalsLoading, setApprovalsLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState<Record<number, boolean>>({});
+
+  const fetchApprovals = useCallback(async () => {
+    setApprovalsLoading(true);
+    const data = await fetch("/api/admin/approvals").then((r) => r.json());
+    setPendingStudents(Array.isArray(data) ? data : []);
+    setApprovalsLoading(false);
+  }, []);
+
   const fetchDailyReport = useCallback(async () => {
     setReportLoading(true);
     const data = await fetch("/api/admin/daily-report").then((r) => r.json());
@@ -150,6 +170,8 @@ export default function AdminPanel() {
     });
   }, [fetchDailyReport]);
 
+  useEffect(() => { fetchApprovals(); }, [fetchApprovals]);
+
   useEffect(() => {
     if (tab !== "leaderboard") return;
     setLbLoading(true);
@@ -167,6 +189,20 @@ export default function AdminPanel() {
       setTsLoading(false);
     });
   }, [tab]);
+
+  async function approveStudent(id: number) {
+    setActionLoading((p) => ({ ...p, [id]: true }));
+    await fetch(`/api/admin/students/${id}/approve`, { method: "PUT" });
+    await fetchApprovals();
+    setActionLoading((p) => ({ ...p, [id]: false }));
+  }
+
+  async function rejectStudent(id: number) {
+    setActionLoading((p) => ({ ...p, [id]: true }));
+    await fetch(`/api/admin/students/${id}/reject`, { method: "PUT" });
+    await fetchApprovals();
+    setActionLoading((p) => ({ ...p, [id]: false }));
+  }
 
   async function saveTarget() {
     const n = parseInt(targetInput);
@@ -264,23 +300,140 @@ export default function AdminPanel() {
 
         {/* ── Tabs ── */}
         <div className="flex gap-1 bg-muted/40 border border-border rounded-lg p-1 w-fit flex-wrap">
-          {([ ["daily", "Daily Report"], ["students", "All Students"], ["overview", "Overview"], ["leaderboard", "💎 Leaderboard"], ["topstudents", "🏅 Top Students"] ] as [Tab, string][]).map(([id, label]) => (
+          {([ ["approvals", "✅ Approvals"], ["daily", "Daily Report"], ["students", "All Students"], ["overview", "Overview"], ["leaderboard", "💎 Leaderboard"], ["topstudents", "🏅 Top Students"] ] as [Tab, string][]).map(([id, label]) => (
             <button
               key={id}
               onClick={() => setTab(id)}
               className={cn(
-                "px-4 py-1.5 text-xs font-semibold rounded-md transition-all",
+                "px-4 py-1.5 text-xs font-semibold rounded-md transition-all relative",
                 tab === id
                   ? "bg-card text-foreground shadow-sm border border-border"
                   : "text-muted-foreground hover:text-foreground",
                 id === "leaderboard" && tab !== "leaderboard" && "text-yellow-500/80 hover:text-yellow-400",
-                id === "topstudents" && tab !== "topstudents" && "text-orange-400/80 hover:text-orange-400"
+                id === "topstudents" && tab !== "topstudents" && "text-orange-400/80 hover:text-orange-400",
+                id === "approvals" && tab !== "approvals" && "text-emerald-400/80 hover:text-emerald-400"
               )}
             >
               {label}
+              {id === "approvals" && pendingStudents.length > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] font-black flex items-center justify-center">
+                  {pendingStudents.length}
+                </span>
+              )}
             </button>
           ))}
         </div>
+
+        {/* ── Approvals Tab ── */}
+        {tab === "approvals" && (
+          <div className="space-y-4">
+            {/* Hero: Mastery Test Series info */}
+            <div className="bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/25 rounded-xl p-5 flex items-center justify-between gap-4">
+              <div>
+                <p className="text-[10px] font-bold text-primary uppercase tracking-widest mb-1">Paid Test Series</p>
+                <h3 className="text-lg font-black text-foreground">Mastery Test Series</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">Approve students who have paid ₹5,000 to grant full access</p>
+              </div>
+              <div className="shrink-0 text-right">
+                <div className="flex items-center gap-1 text-primary">
+                  <IndianRupee className="w-5 h-5" />
+                  <span className="text-2xl font-black">5,000</span>
+                </div>
+                <p className="text-[10px] text-muted-foreground">per year / student</p>
+              </div>
+            </div>
+
+            {/* Pending list */}
+            <div className="bg-card border border-card-border rounded-xl overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-amber-400" />
+                  <h3 className="text-sm font-semibold text-foreground">Pending Approvals</h3>
+                  {pendingStudents.length > 0 && (
+                    <span className="bg-rose-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full">
+                      {pendingStudents.length}
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={fetchApprovals}
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <RefreshCw className={cn("w-3.5 h-3.5", approvalsLoading && "animate-spin")} />
+                  Refresh
+                </button>
+              </div>
+
+              {approvalsLoading ? (
+                <div className="space-y-px">
+                  {[...Array(3)].map((_, i) => (
+                    <div key={i} className="h-16 bg-muted/30 animate-pulse" />
+                  ))}
+                </div>
+              ) : pendingStudents.length === 0 ? (
+                <div className="py-12 text-center">
+                  <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto mb-3" />
+                  <p className="text-sm font-semibold text-foreground">All caught up!</p>
+                  <p className="text-xs text-muted-foreground mt-1">No students waiting for approval.</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-border">
+                  {pendingStudents.map((s) => (
+                    <div key={s.id} className="flex items-center gap-4 px-4 py-3.5 hover:bg-muted/20 transition-colors">
+                      <div className="w-9 h-9 rounded-full bg-amber-500/20 flex items-center justify-center shrink-0">
+                        <span className="text-sm font-black text-amber-400">{s.name[0].toUpperCase()}</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-foreground truncate">{s.name}</p>
+                        <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                          <Phone className="w-2.5 h-2.5" />{s.phone}
+                          <span className="mx-1 text-border">·</span>
+                          Registered {formatDate(s.createdAt)}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={() => approveStudent(s.id)}
+                          disabled={actionLoading[s.id]}
+                          className="flex items-center gap-1.5 text-xs font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-3 py-1.5 rounded-lg hover:bg-emerald-500/25 transition-all disabled:opacity-50"
+                        >
+                          <ShieldCheck className="w-3.5 h-3.5" />
+                          {actionLoading[s.id] ? "…" : "Approve"}
+                        </button>
+                        <button
+                          onClick={() => rejectStudent(s.id)}
+                          disabled={actionLoading[s.id]}
+                          className="flex items-center gap-1.5 text-xs font-bold text-rose-400 bg-rose-500/10 border border-rose-500/20 px-3 py-1.5 rounded-lg hover:bg-rose-500/20 transition-all disabled:opacity-50"
+                        >
+                          <ShieldX className="w-3.5 h-3.5" />
+                          {actionLoading[s.id] ? "…" : "Reject"}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* How it works */}
+            <div className="bg-card border border-card-border rounded-xl p-5">
+              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-3">How approval works</p>
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  { n: "1", title: "Student registers", desc: "Student enters name & phone — access is locked" },
+                  { n: "2", title: "Student pays ₹5,000", desc: "Online (UPI) or offline cash to teacher" },
+                  { n: "3", title: "Teacher approves", desc: "Click Approve here — student gets instant full access" },
+                ].map(({ n, title, desc }) => (
+                  <div key={n} className="bg-muted/30 rounded-lg p-3">
+                    <div className="w-6 h-6 rounded-full bg-primary text-primary-foreground text-[11px] font-black flex items-center justify-center mb-2">{n}</div>
+                    <p className="text-xs font-semibold text-foreground mb-0.5">{title}</p>
+                    <p className="text-[10px] text-muted-foreground leading-relaxed">{desc}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ── Daily Report Tab ── */}
         {tab === "daily" && (
