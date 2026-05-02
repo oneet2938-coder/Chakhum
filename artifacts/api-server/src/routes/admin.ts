@@ -383,4 +383,23 @@ router.put("/admin/students/:id/reject", async (req, res) => {
   res.json(updated);
 });
 
+router.put("/admin/students/:id/course-type", async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) return res.status(400).json({ error: "invalid id" });
+  const { courseType } = req.body as { courseType?: string };
+  if (courseType !== "test_only" && courseType !== "foundation") {
+    return res.status(400).json({ error: "courseType must be 'test_only' or 'foundation'" });
+  }
+  // When switching to test_only (Mastery), set status to pending so teacher can approve
+  // When switching to foundation, auto-approve
+  const status = courseType === "foundation" ? "approved" : "pending";
+  const [updated] = await db
+    .update(studentsTable)
+    .set({ courseType, status })
+    .where(eq(studentsTable.id, id))
+    .returning();
+  if (!updated) return res.status(404).json({ error: "student not found" });
+  res.json(updated);
+});
+
 export default router;

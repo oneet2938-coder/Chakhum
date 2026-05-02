@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import {
   Users, TrendingUp, ClipboardList, ChevronDown, ChevronUp,
   LogOut, Phone, CheckCircle2, XCircle, Target, Settings, Save,
-  RefreshCw, Trophy, ShieldCheck, ShieldX, Clock, IndianRupee,
+  RefreshCw, Trophy, ShieldCheck, ShieldX, Clock, IndianRupee, ArrowLeftRight,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
@@ -145,6 +145,9 @@ export default function AdminPanel() {
   const [approvalsLoading, setApprovalsLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<Record<number, boolean>>({});
 
+  // Course type switching
+  const [courseTypeLoading, setCourseTypeLoading] = useState<Record<number, boolean>>({});
+
   const fetchApprovals = useCallback(async () => {
     setApprovalsLoading(true);
     const data = await fetch("/api/admin/approvals").then((r) => r.json());
@@ -221,6 +224,22 @@ export default function AdminPanel() {
     setTargetSaved(true);
     setTimeout(() => setTargetSaved(false), 2000);
     fetchDailyReport();
+  }
+
+  async function switchCourseType(id: number, currentType: string) {
+    const newType = currentType === "test_only" ? "foundation" : "test_only";
+    setCourseTypeLoading((p) => ({ ...p, [id]: true }));
+    await fetch(`/api/admin/students/${id}/course-type`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ courseType: newType }),
+    });
+    setStudents((prev) =>
+      prev.map((s) => s.id === id ? { ...s, courseType: newType } : s)
+    );
+    // Refresh approvals in case a pending approval was created
+    fetchApprovals();
+    setCourseTypeLoading((p) => ({ ...p, [id]: false }));
   }
 
   async function toggleStudent(id: number) {
@@ -673,10 +692,24 @@ export default function AdminPanel() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="text-sm font-semibold text-foreground truncate">{s.name}</p>
-                        {(s as unknown as StudentStat).courseType === "test_only"
-                          ? <span className="text-[9px] font-black text-primary bg-primary/10 border border-primary/20 px-1.5 py-0.5 rounded-full shrink-0">MASTERY</span>
+                        {s.courseType === "test_only"
+                          ? <span className="text-[9px] font-black text-primary bg-primary/10 border border-primary/20 px-1.5 py-0.5 rounded-full shrink-0">TEST SERIES</span>
                           : <span className="text-[9px] font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-full shrink-0">FOUNDATION</span>
                         }
+                        <button
+                          onClick={(e) => { e.stopPropagation(); switchCourseType(s.id, s.courseType); }}
+                          disabled={courseTypeLoading[s.id]}
+                          title={s.courseType === "test_only" ? "Switch to Foundation" : "Switch to Test Series"}
+                          className={cn(
+                            "flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full border transition-all shrink-0",
+                            courseTypeLoading[s.id]
+                              ? "opacity-40 cursor-not-allowed border-border text-muted-foreground"
+                              : "border-border text-muted-foreground hover:border-primary/40 hover:text-primary hover:bg-primary/10"
+                          )}
+                        >
+                          <ArrowLeftRight className="w-2.5 h-2.5" />
+                          {courseTypeLoading[s.id] ? "…" : s.courseType === "test_only" ? "→ Foundation" : "→ Test Series"}
+                        </button>
                         {isDone && (
                           <span className="text-[9px] font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/25 px-1.5 py-0.5 rounded-full">
                             ✓ TODAY
