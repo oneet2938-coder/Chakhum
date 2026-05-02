@@ -1,13 +1,27 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { testsTable, testQuestionsTable, questionsTable, topicsTable } from "@workspace/db";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, ne } from "drizzle-orm";
 import { CreateTestBody } from "@workspace/api-zod";
 
 const router = Router();
 
 router.get("/tests", async (req, res) => {
-  const tests = await db.select().from(testsTable);
+  const { testType } = req.query;
+  let tests;
+  if (testType === "mastery") {
+    tests = await db
+      .select()
+      .from(testsTable)
+      .where(ne(testsTable.testType, "practice"));
+  } else if (typeof testType === "string") {
+    tests = await db
+      .select()
+      .from(testsTable)
+      .where(eq(testsTable.testType, testType));
+  } else {
+    tests = await db.select().from(testsTable);
+  }
   res.json(tests);
 });
 
