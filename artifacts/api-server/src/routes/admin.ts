@@ -8,6 +8,7 @@ import {
   questionsTable,
   topicsTable,
   settingsTable,
+  practiceAnswersTable,
 } from "@workspace/db";
 import { eq, sql, isNotNull } from "drizzle-orm";
 
@@ -47,12 +48,11 @@ router.get("/admin/daily-report", async (_req, res) => {
     .from(studentsTable)
     .orderBy(studentsTable.createdAt);
 
-  // Count questions answered TODAY per student (via attempt_answers linked to today's attempts)
-  const todayActivity = await db
+  // Questions from mock tests today
+  const testActivity = await db
     .select({
       studentId: attemptsTable.studentId,
-      questionsToday: sql<number>`count(${attemptAnswersTable.id})::int`,
-      testsToday: sql<number>`count(distinct ${attemptsTable.id})::int`,
+      count: sql<number>`count(${attemptAnswersTable.id})::int`,
     })
     .from(attemptAnswersTable)
     .innerJoin(attemptsTable, eq(attemptAnswersTable.attemptId, attemptsTable.id))
@@ -62,19 +62,34 @@ router.get("/admin/daily-report", async (_req, res) => {
     )
     .groupBy(attemptsTable.studentId);
 
-  const activityMap = Object.fromEntries(todayActivity.map((a) => [a.studentId!, a]));
+  // Questions from practice section today
+  const practiceActivity = await db
+    .select({
+      studentId: practiceAnswersTable.studentId,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(practiceAnswersTable)
+    .where(
+      sql`DATE(${practiceAnswersTable.answeredAt} AT TIME ZONE 'UTC') = CURRENT_DATE
+          AND ${practiceAnswersTable.studentId} IS NOT NULL`
+    )
+    .groupBy(practiceAnswersTable.studentId);
+
+  const testMap = Object.fromEntries(testActivity.map((a) => [a.studentId!, a.count]));
+  const practiceMap = Object.fromEntries(practiceActivity.map((a) => [a.studentId!, a.count]));
 
   const report = students.map((s) => {
-    const activity = activityMap[s.id];
-    const questionsToday = activity?.questionsToday ?? 0;
-    const testsToday = activity?.testsToday ?? 0;
+    const fromTests = testMap[s.id] ?? 0;
+    const fromPractice = practiceMap[s.id] ?? 0;
+    const questionsToday = fromTests + fromPractice;
     const completed = questionsToday >= target;
     return {
       id: s.id,
       name: s.name,
       phone: s.phone,
       questionsToday,
-      testsToday,
+      fromTests,
+      fromPractice,
       target,
       completed,
       remaining: Math.max(0, target - questionsToday),

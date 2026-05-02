@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useListTopics, useListQuestions } from "@workspace/api-client-react";
+import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
 import { CheckCircle, XCircle, ChevronRight, RotateCcw } from "lucide-react";
 
@@ -10,6 +11,7 @@ const DIFFICULTY_COLORS = {
 };
 
 export default function Practice() {
+  const { user } = useAuth();
   const { data: topics } = useListTopics();
   const [selectedTopic, setSelectedTopic] = useState<number | undefined>(undefined);
   const [selectedDifficulty, setSelectedDifficulty] = useState<string | undefined>(undefined);
@@ -26,10 +28,27 @@ export default function Practice() {
   const totalAnswered = sessionAnswers.length;
   const totalCorrect = sessionAnswers.filter((a) => a.correct).length;
 
+  async function recordAnswer(questionId: number, selectedOption: number) {
+    if (user?.role !== "student") return;
+    try {
+      await fetch("/api/practice/answer", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Student-ID": String((user as any).studentId),
+        },
+        body: JSON.stringify({ questionId, selectedOption }),
+      });
+    } catch {
+      // silent — don't block the UI if tracking fails
+    }
+  }
+
   function handleAnswer(optionIdx: number) {
     if (answered !== null || !currentQ) return;
     setAnswered(optionIdx);
     setSessionAnswers((prev) => [...prev, { correct: optionIdx === currentQ.correctOption }]);
+    recordAnswer(currentQ.id, optionIdx);
   }
 
   function nextQuestion() {
