@@ -180,7 +180,7 @@ export default function AdminPanel() {
   const [aiImageName, setAiImageName] = useState<string | null>(null);
   const [aiTopicId, setAiTopicId] = useState<number | "">("");
   const [aiSubtopicId, setAiSubtopicId] = useState<number | "">("");
-  const [aiCount, setAiCount] = useState(5);
+  const [aiCount, setAiCount] = useState(10);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiGenerated, setAiGenerated] = useState<GeneratedMCQ[]>([]);
   const [aiSaving, setAiSaving] = useState(false);
@@ -1510,9 +1510,9 @@ export default function AdminPanel() {
                 <div className="space-y-1">
                   <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">No. of Questions</label>
                   <input
-                    type="number" min={1} max={10}
+                    type="number" min={1} max={50}
                     value={aiCount}
-                    onChange={(e) => setAiCount(Math.min(10, Math.max(1, Number(e.target.value))))}
+                    onChange={(e) => setAiCount(Math.min(50, Math.max(1, Number(e.target.value))))}
                     className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/60"
                   />
                 </div>
