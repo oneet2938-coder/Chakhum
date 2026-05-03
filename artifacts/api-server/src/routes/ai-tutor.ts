@@ -23,8 +23,15 @@ Formatting:
 
 You are talking to a NEET aspirant. Be encouraging, precise, and exam-focused.`;
 
+function getStudentId(req: any): number | null {
+  const h = req.headers["x-student-id"];
+  if (!h) return null;
+  const n = parseInt(h as string);
+  return isNaN(n) ? null : n;
+}
+
 router.post("/ai/chat", async (req, res) => {
-  const studentId = req.session?.studentId;
+  const studentId = getStudentId(req);
   if (!studentId) return res.status(401).json({ error: "Not authenticated" });
 
   const { messages } = req.body;
@@ -38,17 +45,21 @@ router.post("/ai/chat", async (req, res) => {
     content: m.content as string,
   }));
 
-  const response = await anthropic.messages.create({
-    model: "claude-opus-4-5",
-    max_tokens: 2048,
-    system: SYSTEM_PROMPT,
-    messages: context,
-  });
+  try {
+    const response = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 8192,
+      system: SYSTEM_PROMPT,
+      messages: context,
+    });
 
-  const block = response.content[0];
-  if (block.type !== "text") return res.status(500).json({ error: "Unexpected response" });
+    const block = response.content[0];
+    if (block.type !== "text") return res.status(500).json({ error: "Unexpected response" });
 
-  res.json({ reply: block.text });
+    res.json({ reply: block.text });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? "AI request failed" });
+  }
 });
 
 export default router;

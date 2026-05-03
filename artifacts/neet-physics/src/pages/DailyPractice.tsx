@@ -37,8 +37,20 @@ export default function DailyPractice() {
   const [showExplanation, setShowExplanation] = useState<Record<number, boolean>>({});
   const [submitting, setSubmitting] = useState(false);
 
+  function getStudentHeader(): Record<string, string> {
+    try {
+      const raw = localStorage.getItem("emc_session");
+      if (!raw) return {};
+      const u = JSON.parse(raw);
+      if (u?.studentId) return { "X-Student-ID": String(u.studentId) };
+    } catch {}
+    return {};
+  }
+
   useEffect(() => {
-    fetch(`${import.meta.env.BASE_URL}api/practice-sets/today`)
+    fetch(`${import.meta.env.BASE_URL}api/practice-sets/today`, {
+      headers: getStudentHeader(),
+    })
       .then((r) => r.json())
       .then((data) => {
         setPracticeSet(data);
@@ -59,7 +71,7 @@ export default function DailyPractice() {
     setSubmitting(true);
     const res = await fetch(`${import.meta.env.BASE_URL}api/practice-sets/${practiceSet.id}/complete`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...getStudentHeader() },
       body: JSON.stringify({ answers: answerArr }),
     });
     const data = await res.json();

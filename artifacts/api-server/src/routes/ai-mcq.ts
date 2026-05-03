@@ -21,32 +21,28 @@ Rules:
 - Each question must be clear, unambiguous, and at NEET/JEE Class 11-12 Physics level
 - Each question must have EXACTLY 4 options (A, B, C, D)
 - Each question must have EXACTLY ONE correct answer
-- Include a detailed step-by-step explanation for each answer
+- Include a concise but complete explanation for each answer
 - Cover varied difficulty: mix of easy, medium, hard
-- If generating from an image: extract ALL questions visible in the image and generate additional ones based on the topic/concept shown
-- Do NOT include any markdown, backticks, or prose outside the JSON
+- If generating from an image: carefully read ALL text visible and generate questions based on the concepts shown
+- Return ONLY raw JSON, no markdown, no backticks, no prose
 
-Return ONLY this exact JSON structure:
-{"questions":[{"text":"Question text","options":["Option A","Option B","Option C","Option D"],"correctOption":0,"explanation":"Detailed explanation","difficulty":"easy"}]}
+Return ONLY this exact JSON:
+{"questions":[{"text":"Question text","options":["Option A","Option B","Option C","Option D"],"correctOption":0,"explanation":"Explanation","difficulty":"easy"}]}
 
-correctOption is 0-indexed (0=A, 1=B, 2=C, 3=D).`;
+correctOption is 0-indexed (0=A, 1=B, 2=C, 3=D). difficulty must be "easy", "medium", or "hard".`;
 
   const userContent: any[] = [];
 
   if (imageBase64 && imageMediaType) {
     userContent.push({
       type: "image",
-      source: {
-        type: "base64",
-        media_type: imageMediaType,
-        data: imageBase64,
-      },
+      source: { type: "base64", media_type: imageMediaType, data: imageBase64 },
     });
     userContent.push({
       type: "text",
       text: text
-        ? `The image above shows a question paper or Physics content. Generate ${clampedCount} MCQs from it. Additional context: ${text}`
-        : `The image above shows a question paper or Physics content. Carefully read ALL text in the image and generate ${clampedCount} NEET-level Physics MCQs based on it.`,
+        ? `Generate ${clampedCount} MCQs from the image and this context: ${text}`
+        : `Carefully read the image above and generate ${clampedCount} NEET Physics MCQs from the content shown.`,
     });
   } else {
     userContent.push({
@@ -57,8 +53,8 @@ correctOption is 0-indexed (0=A, 1=B, 2=C, 3=D).`;
 
   try {
     const message = await anthropic.messages.create({
-      model: "claude-opus-4-5",
-      max_tokens: 16000,
+      model: "claude-sonnet-4-6",
+      max_tokens: 8192,
       system: systemPrompt,
       messages: [{ role: "user", content: userContent }],
     });
@@ -66,11 +62,10 @@ correctOption is 0-indexed (0=A, 1=B, 2=C, 3=D).`;
     const block = message.content[0];
     if (block.type !== "text") return res.status(500).json({ error: "Unexpected response type from AI" });
 
-    // Strip any accidental markdown fences
     let jsonText = block.text.trim();
+    // Strip accidental markdown fences
     jsonText = jsonText.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "");
-
-    // Extract JSON object if there's surrounding text
+    // Extract JSON object if surrounded by text
     const jsonMatch = jsonText.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return res.status(500).json({ error: "AI did not return valid JSON", raw: block.text.slice(0, 500) });
 
@@ -81,8 +76,7 @@ correctOption is 0-indexed (0=A, 1=B, 2=C, 3=D).`;
       return res.status(500).json({ error: "Failed to parse AI response", raw: block.text.slice(0, 500) });
     }
 
-    const questions = parsed.questions ?? [];
-    res.json({ questions, topicId, subtopicId });
+    res.json({ questions: parsed.questions ?? [], topicId, subtopicId });
   } catch (err: any) {
     res.status(500).json({ error: err?.message ?? "AI generation failed" });
   }

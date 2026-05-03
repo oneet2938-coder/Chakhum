@@ -125,6 +125,16 @@ function TypingIndicator() {
   );
 }
 
+function getStudentHeader(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem("emc_session");
+    if (!raw) return {};
+    const u = JSON.parse(raw);
+    if (u?.studentId) return { "X-Student-ID": String(u.studentId) };
+  } catch {}
+  return {};
+}
+
 export default function AiTutor() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -159,7 +169,7 @@ export default function AiTutor() {
     try {
       const res = await fetch(`${import.meta.env.BASE_URL}api/ai/chat`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getStudentHeader() },
         body: JSON.stringify({
           messages: newMessages.map((m) => ({ role: m.role, content: m.content })),
         }),

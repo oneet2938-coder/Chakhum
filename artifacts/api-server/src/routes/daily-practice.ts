@@ -4,6 +4,13 @@ import { sql } from "drizzle-orm";
 
 const router = Router();
 
+function getStudentId(req: any): number | null {
+  const h = req.headers["x-student-id"];
+  if (!h) return null;
+  const n = parseInt(h as string);
+  return isNaN(n) ? null : n;
+}
+
 // Admin: list all practice sets
 router.get("/admin/practice-sets", async (req, res) => {
   const sets = await db.execute(sql`
@@ -61,7 +68,7 @@ router.get("/admin/practice-sets/:id/completions", async (req, res) => {
 
 // Student: get today's practice set
 router.get("/practice-sets/today", async (req, res) => {
-  const studentId = req.session?.studentId;
+  const studentId = getStudentId(req);
   const today = new Date().toISOString().split("T")[0];
 
   const setResult = await db.execute(sql`
@@ -120,7 +127,7 @@ router.get("/practice-sets/today", async (req, res) => {
 
 // Student: submit practice set completion
 router.post("/practice-sets/:id/complete", async (req, res) => {
-  const studentId = req.session?.studentId;
+  const studentId = getStudentId(req);
   if (!studentId) return res.status(401).json({ error: "Not authenticated" });
 
   const setId = parseInt(req.params.id);
