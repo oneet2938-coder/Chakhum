@@ -82,6 +82,10 @@ correctOption is 0-indexed (0=A, 1=B, 2=C, 3=D). difficulty must be "easy", "med
   }
 });
 
+function toPgArray(arr: string[]): string {
+  return "{" + arr.map((s) => '"' + s.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"').join(",") + "}";
+}
+
 router.post("/ai/save-questions", async (req, res) => {
   const { questions, topicId, subtopicId } = req.body;
   if (!questions?.length || !topicId) {
@@ -90,13 +94,14 @@ router.post("/ai/save-questions", async (req, res) => {
 
   const inserted: number[] = [];
   for (const q of questions) {
+    const pgOpts = toPgArray(q.options);
     const result = await db.execute(sql`
       INSERT INTO questions (topic_id, subtopic_id, text, options, correct_option, explanation, difficulty)
       VALUES (
         ${topicId},
         ${subtopicId ?? null},
         ${q.text},
-        ${JSON.stringify(q.options)}::text[],
+        ${pgOpts}::text[],
         ${q.correctOption},
         ${q.explanation},
         ${q.difficulty ?? "medium"}

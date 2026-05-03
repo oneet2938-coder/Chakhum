@@ -4,6 +4,7 @@ import {
   LogOut, Phone, CheckCircle2, XCircle, Target, Settings, Save,
   RefreshCw, Trophy, ShieldCheck, ShieldX, Clock, IndianRupee, ArrowLeftRight, Trash2,
   Sparkles, CalendarDays, Plus, ImageUp, FileText, Eye, BookOpen, AlertCircle,
+  Bot, Search, Copy,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
@@ -189,6 +190,15 @@ export default function AdminPanel() {
   const [aiSubtopics, setAiSubtopics] = useState<SubtopicOption[]>([]);
   const [aiError, setAiError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // AI Agent tab
+  const [agentInstruction, setAgentInstruction] = useState("");
+  const [agentTopicId, setAgentTopicId] = useState<number | "">("");
+  const [agentLoading, setAgentLoading] = useState(false);
+  const [agentResults, setAgentResults] = useState<any[]>([]);
+  const [agentReasoning, setAgentReasoning] = useState("");
+  const [agentError, setAgentError] = useState<string | null>(null);
+  const [agentCopied, setAgentCopied] = useState(false);
 
   // Daily Practice tab
   const [dpSets, setDpSets] = useState<PracticeSetRow[]>([]);
@@ -395,6 +405,39 @@ export default function AdminPanel() {
     const data = await res.json();
     setAiSaving(false);
     if (data.saved) { setAiSaved(true); setAiGenerated([]); setAiText(""); setAiImageB64(null); setAiImageName(null); setTimeout(() => setAiSaved(false), 3000); }
+  }
+
+  async function runAgent() {
+    if (!agentInstruction.trim()) return;
+    setAgentLoading(true);
+    setAgentError(null);
+    setAgentResults([]);
+    setAgentReasoning("");
+    try {
+      const res = await fetch("/api/ai/agent-select", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          instruction: agentInstruction,
+          topicId: agentTopicId || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Agent failed");
+      setAgentResults(data.questions ?? []);
+      setAgentReasoning(data.reasoning ?? "");
+    } catch (e: any) {
+      setAgentError(e.message ?? "Agent failed");
+    } finally {
+      setAgentLoading(false);
+    }
+  }
+
+  function copyAgentIds() {
+    const ids = agentResults.map((q) => q.id).join(", ");
+    navigator.clipboard.writeText(ids);
+    setAgentCopied(true);
+    setTimeout(() => setAgentCopied(false), 2000);
   }
 
   async function createPracticeSet() {
@@ -1643,6 +1686,127 @@ export default function AdminPanel() {
                 </button>
               </div>
             )}
+
+            {/* ── AI Question Selector Agent ── */}
+            <div className="border-t border-border pt-6 space-y-4">
+              <div>
+                <h2 className="text-base font-bold text-foreground flex items-center gap-2">
+                  <Bot className="w-4 h-4 text-violet-400" /> AI Question Selector
+                </h2>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Tell the AI which questions to pull from your question bank — it will find and return them for you.
+                </p>
+              </div>
+
+              <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="sm:col-span-2 space-y-1">
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Your Instruction</label>
+                    <textarea
+                      placeholder={`e.g. "Give me 10 hard questions on Newton's Laws for a surprise test" or "Find all medium-difficulty questions on Thermodynamics about heat transfer"`}
+                      value={agentInstruction}
+                      onChange={(e) => setAgentInstruction(e.target.value)}
+                      rows={3}
+                      className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-violet-500/50 focus:ring-1 focus:ring-violet-500/20 resize-none transition-all"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Filter by Topic (optional)</label>
+                    <select
+                      value={agentTopicId}
+                      onChange={(e) => setAgentTopicId(e.target.value ? Number(e.target.value) : "")}
+                      className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-violet-500/50 h-[88px]"
+                    >
+                      <option value="">All topics</option>
+                      {aiTopics.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                {agentError && (
+                  <div className="flex items-center gap-2 text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-lg px-3 py-2">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" /> {agentError}
+                  </div>
+                )}
+
+                <button
+                  onClick={runAgent}
+                  disabled={agentLoading || !agentInstruction.trim()}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-violet-600 text-white text-sm font-bold rounded-lg hover:bg-violet-500 transition-colors disabled:opacity-40"
+                >
+                  <Search className="w-4 h-4" />
+                  {agentLoading ? "Agent is thinking…" : "Run AI Agent"}
+                </button>
+              </div>
+
+              {/* Agent results */}
+              {agentResults.length > 0 && (
+                <div className="space-y-4">
+                  {agentReasoning && (
+                    <div className="flex items-start gap-2 bg-violet-500/10 border border-violet-500/20 rounded-xl px-4 py-3">
+                      <Bot className="w-4 h-4 text-violet-400 shrink-0 mt-0.5" />
+                      <p className="text-xs text-violet-300 leading-relaxed">{agentReasoning}</p>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-foreground">
+                      Selected {agentResults.length} question{agentResults.length !== 1 ? "s" : ""}
+                    </h3>
+                    <button
+                      onClick={copyAgentIds}
+                      className={cn(
+                        "flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all",
+                        agentCopied
+                          ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400"
+                          : "bg-muted/50 border-border text-muted-foreground hover:text-foreground hover:border-primary/30"
+                      )}
+                    >
+                      <Copy className="w-3 h-3" />
+                      {agentCopied ? "Copied!" : "Copy IDs"}
+                    </button>
+                  </div>
+
+                  <div className="text-[11px] text-muted-foreground bg-muted/30 border border-border rounded-lg px-3 py-2 font-mono">
+                    {agentResults.map((q) => q.id).join(", ")}
+                  </div>
+
+                  <div className="space-y-2">
+                    {agentResults.map((q, idx) => (
+                      <div key={q.id} className="bg-card border border-card-border rounded-xl p-3 flex items-start gap-3">
+                        <div className="flex flex-col items-center gap-1 shrink-0">
+                          <span className="text-[10px] font-mono font-bold text-muted-foreground">#{q.id}</span>
+                        </div>
+                        <div className="flex-1 min-w-0 space-y-1">
+                          <p className="text-xs text-foreground leading-relaxed">{q.text}</p>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 border border-primary/20 text-primary/80">{q.topicName}</span>
+                            <span className={cn(
+                              "text-[10px] px-1.5 py-0.5 rounded border font-semibold uppercase tracking-wider",
+                              q.difficulty === "easy" ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/25" :
+                              q.difficulty === "hard" ? "bg-rose-500/15 text-rose-400 border-rose-500/25" :
+                              "bg-amber-500/15 text-amber-400 border-amber-500/25"
+                            )}>
+                              {q.difficulty}
+                            </span>
+                          </div>
+                        </div>
+                        <span className="text-[10px] font-mono text-muted-foreground shrink-0">{idx + 1}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {!agentLoading && agentInstruction && agentResults.length === 0 && agentReasoning && (
+                <div className="py-8 text-center bg-card border border-card-border rounded-xl">
+                  <Search className="w-6 h-6 text-muted-foreground mx-auto mb-2 opacity-40" />
+                  <p className="text-sm text-muted-foreground">No matching questions found.</p>
+                  <p className="text-xs text-muted-foreground/60 mt-1">{agentReasoning}</p>
+                </div>
+              )}
+            </div>
+
           </div>
         )}
 

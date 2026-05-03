@@ -13,6 +13,7 @@ import gamificationRouter from "./gamification";
 import aiMcqRouter from "./ai-mcq";
 import dailyPracticeRouter from "./daily-practice";
 import aiTutorRouter from "./ai-tutor";
+import aiAgentRouter from "./ai-agent";
 
 const router: IRouter = Router();
 
@@ -30,5 +31,6 @@ router.use(gamificationRouter);
 router.use(aiMcqRouter);
 router.use(dailyPracticeRouter);
 router.use(aiTutorRouter);
+router.use(aiAgentRouter);
 
 export default router;
