@@ -12,7 +12,7 @@ function getStudentId(req: any): number | null {
 }
 
 // Admin: list all practice sets
-router.get("/admin/practice-sets", async (req, res) => {
+router.get("/admin/practice-sets", async (_req, res) => {
   const sets = await db.execute(sql`
     SELECT ps.id, ps.title, ps.description, ps.practice_date,
            array_length(ps.question_ids, 1) as question_count,
@@ -88,15 +88,15 @@ router.get("/practice-sets/today", async (req, res) => {
   const set = setResult.rows[0] as any;
   const questionIds: number[] = set.question_ids ?? [];
 
-  // Fetch questions
   let questions: any[] = [];
   if (questionIds.length > 0) {
+    const pgArr = `{${questionIds.join(",")}}`;
     const qResult = await db.execute(sql`
       SELECT q.id, q.text, q.options, q.correct_option, q.explanation, q.difficulty, t.name as topic_name
       FROM questions q
       JOIN topics t ON t.id = q.topic_id
-      WHERE q.id = ANY(${JSON.stringify(questionIds)}::integer[])
-      ORDER BY array_position(${JSON.stringify(questionIds)}::integer[], q.id)
+      WHERE q.id = ANY(${pgArr}::integer[])
+      ORDER BY array_position(${pgArr}::integer[], q.id)
     `);
     questions = qResult.rows.map((r: any) => ({
       id: r.id,
@@ -109,7 +109,6 @@ router.get("/practice-sets/today", async (req, res) => {
     }));
   }
 
-  // Check if student already completed
   let completion = null;
   if (studentId) {
     const compResult = await db.execute(sql`
@@ -138,10 +137,19 @@ router.post("/practice-sets/:id/complete", async (req, res) => {
   const setId = parseInt(req.params.id);
   const { answers } = req.body; // [{ questionId, selectedOption }]
 
+  // Check if already completed (to determine if diamond is being earned for first time)
+  const existing = await db.execute(sql`
+    SELECT id FROM daily_practice_completions
+    WHERE set_id = ${setId} AND student_id = ${studentId}
+    LIMIT 1
+  `);
+  const isFirstTime = !existing.rows.length;
+
   // Fetch correct answers
-  const qIds = answers.map((a: any) => a.questionId);
+  const qIds: number[] = answers.map((a: any) => a.questionId);
+  const pgArr = `{${qIds.join(",")}}`;
   const qResult = await db.execute(sql`
-    SELECT id, correct_option FROM questions WHERE id = ANY(${JSON.stringify(qIds)}::integer[])
+    SELECT id, correct_option FROM questions WHERE id = ANY(${pgArr}::integer[])
   `);
   const correctMap = Object.fromEntries(qResult.rows.map((r: any) => [r.id, r.correct_option]));
 
@@ -150,6 +158,7 @@ router.post("/practice-sets/:id/complete", async (req, res) => {
     if (correctMap[a.questionId] === a.selectedOption) score++;
   }
 
+  // Save completion record
   await db.execute(sql`
     INSERT INTO daily_practice_completions (set_id, student_id, answers, score, total)
     VALUES (${setId}, ${studentId}, ${JSON.stringify(answers)}::jsonb, ${score}, ${answers.length})
@@ -157,7 +166,19 @@ router.post("/practice-sets/:id/complete", async (req, res) => {
       SET answers = EXCLUDED.answers, score = EXCLUDED.score, total = EXCLUDED.total, completed_at = NOW()
   `);
 
-  res.json({ score, total: answers.length });
+  // Award diamond: insert into practice_answers so gamification system counts them
+  // Only insert if first time to avoid duplicate counting
+  if (isFirstTime && qIds.length > 0) {
+    for (const a of answers) {
+      const isCorrect = correctMap[a.questionId] === a.selectedOption;
+      await db.execute(sql`
+        INSERT INTO practice_answers (student_id, question_id, selected_option, is_correct)
+        VALUES (${studentId}, ${a.questionId}, ${a.selectedOption}, ${isCorrect})
+      `);
+    }
+  }
+
+  res.json({ score, total: answers.length, diamondEarned: isFirstTime });
 });
 
 export default router;

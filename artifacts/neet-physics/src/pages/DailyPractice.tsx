@@ -36,6 +36,7 @@ export default function DailyPractice() {
   const [result, setResult] = useState<{ score: number; total: number } | null>(null);
   const [showExplanation, setShowExplanation] = useState<Record<number, boolean>>({});
   const [submitting, setSubmitting] = useState(false);
+  const [diamondEarned, setDiamondEarned] = useState(false);
 
   function getStudentHeader(): Record<string, string> {
     try {
@@ -76,6 +77,7 @@ export default function DailyPractice() {
     });
     const data = await res.json();
     setResult(data);
+    setDiamondEarned(data.diamondEarned ?? false);
     setSubmitted(true);
     setSubmitting(false);
   }
@@ -127,6 +129,17 @@ export default function DailyPractice() {
         <Link href="/" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
           <ArrowLeft className="w-3.5 h-3.5" /> Back to Dashboard
         </Link>
+
+        {/* Diamond earned banner */}
+        {diamondEarned && (
+          <div className="bg-gradient-to-r from-blue-500/15 to-violet-500/15 border border-blue-500/30 rounded-xl px-5 py-4 flex items-center gap-4">
+            <span className="text-4xl">💎</span>
+            <div>
+              <p className="text-sm font-bold text-foreground">You earned a Diamond!</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Completing today's practice counts toward your daily goal. Keep it up!</p>
+            </div>
+          </div>
+        )}
 
         <div className={cn(
           "rounded-xl p-6 border text-center",

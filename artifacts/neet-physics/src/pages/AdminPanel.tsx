@@ -175,6 +175,7 @@ export default function AdminPanel() {
   const [deleteLoading, setDeleteLoading] = useState<Record<number, boolean>>({});
 
   // AI Tools tab
+  const [aiMode, setAiMode] = useState<"extractor" | "generator">("extractor");
   const [aiText, setAiText] = useState("");
   const [aiImageB64, setAiImageB64] = useState<string | null>(null);
   const [aiImageMime, setAiImageMime] = useState<string>("image/jpeg");
@@ -1886,12 +1887,148 @@ export default function AdminPanel() {
           <div className="space-y-6">
             <div>
               <h2 className="text-base font-bold text-foreground flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-primary" /> Smart MCQ Extractor
+                <Sparkles className="w-4 h-4 text-primary" /> AI MCQ Tools
               </h2>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Paste text or upload an image → AI identifies all questions found → you choose which ones to extract as proper MCQs.
-              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">Generate questions from scratch or extract specific ones from existing content.</p>
             </div>
+
+            {/* Mode toggle */}
+            <div className="flex gap-1 bg-muted/40 border border-border rounded-lg p-1 w-fit">
+              {([["generator", "⚡ Quick Generate"], ["extractor", "🔍 Smart Extractor"]] as const).map(([mode, label]) => (
+                <button
+                  key={mode}
+                  onClick={() => setAiMode(mode)}
+                  className={cn(
+                    "px-4 py-1.5 text-xs font-semibold rounded-md transition-all",
+                    aiMode === mode ? "bg-card text-foreground shadow-sm border border-border" : "text-muted-foreground hover:text-foreground"
+                  )}
+                >{label}</button>
+              ))}
+            </div>
+
+            {/* ── QUICK GENERATOR ── */}
+            {aiMode === "generator" && (
+              <>
+                <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+                  <p className="text-xs text-muted-foreground">Paste notes, a topic, or any text — Claude generates fresh MCQs ready to save.</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Chapter / Topic *</label>
+                      <select value={aiTopicId} onChange={(e) => setAiTopicId(e.target.value ? Number(e.target.value) : "")}
+                        className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/60">
+                        <option value="">Select topic…</option>
+                        {aiTopics.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Subtopic (optional)</label>
+                      <select value={aiSubtopicId} onChange={(e) => setAiSubtopicId(e.target.value ? Number(e.target.value) : "")}
+                        disabled={!aiTopicId || aiSubtopics.length === 0}
+                        className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/60 disabled:opacity-50">
+                        <option value="">Any subtopic</option>
+                        {aiSubtopics.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">No. of Questions</label>
+                      <input type="number" min={1} max={50} value={aiCount}
+                        onChange={(e) => setAiCount(Math.min(50, Math.max(1, Number(e.target.value))))}
+                        className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/60" />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                      <FileText className="w-3 h-3" /> Paste Text / Notes
+                    </label>
+                    <textarea placeholder="Paste chapter notes, a concept, problem description, or anything you want MCQs about…"
+                      value={aiText} onChange={(e) => setAiText(e.target.value)} rows={5}
+                      className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/60 resize-none" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                      <ImageUp className="w-3 h-3" /> Or Upload Image
+                    </label>
+                    <input ref={fileInputRef} type="file" accept="image/*" className="hidden"
+                      onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImageUpload(f); }} />
+                    {aiImageName ? (
+                      <div className="flex items-center gap-3 bg-primary/10 border border-primary/25 rounded-lg px-3 py-2">
+                        <ImageUp className="w-4 h-4 text-primary shrink-0" />
+                        <span className="text-xs text-foreground font-medium truncate flex-1">{aiImageName}</span>
+                        <button onClick={() => { setAiImageB64(null); setAiImageName(null); }} className="text-[11px] text-muted-foreground hover:text-rose-400 transition-colors">Remove</button>
+                      </div>
+                    ) : (
+                      <button onClick={() => fileInputRef.current?.click()}
+                        className="flex items-center gap-2 px-4 py-2.5 bg-muted/40 border border-dashed border-border rounded-lg text-xs text-muted-foreground hover:border-primary/40 hover:text-foreground transition-all w-full justify-center">
+                        <ImageUp className="w-4 h-4" /> Click to upload image
+                      </button>
+                    )}
+                  </div>
+                  {aiError && (
+                    <div className="flex items-center gap-2 text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-lg px-3 py-2">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" /> {aiError}
+                    </div>
+                  )}
+                  {aiSaved && (
+                    <div className="flex items-center gap-2 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2">
+                      <CheckCircle2 className="w-3.5 h-3.5 shrink-0" /> Questions saved to the question bank!
+                    </div>
+                  )}
+                  <button onClick={generateMCQs} disabled={aiLoading || (!aiText && !aiImageB64) || !aiTopicId}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground text-sm font-bold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40">
+                    <Sparkles className="w-4 h-4" />
+                    {aiLoading ? "Generating…" : `Generate ${aiCount} MCQ${aiCount > 1 ? "s" : ""}`}
+                  </button>
+                </div>
+                {aiGenerated.length > 0 && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                        <Eye className="w-4 h-4 text-primary" /> Generated MCQs ({aiGenerated.length})
+                      </h3>
+                      <button onClick={saveMCQs} disabled={aiSaving}
+                        className="flex items-center gap-2 px-4 py-1.5 bg-emerald-500 text-white text-xs font-bold rounded-lg hover:bg-emerald-400 transition-colors disabled:opacity-50">
+                        <Save className="w-3.5 h-3.5" /> {aiSaving ? "Saving…" : "Save All to Bank"}
+                      </button>
+                    </div>
+                    <div className="space-y-3">
+                      {aiGenerated.map((q, idx) => (
+                        <div key={idx} className="bg-card border border-card-border rounded-xl p-4 space-y-3">
+                          <div className="flex items-start gap-2">
+                            <span className="text-[11px] font-bold text-muted-foreground shrink-0 mt-0.5">Q{idx + 1}</span>
+                            <p className="text-sm text-foreground leading-relaxed flex-1">{q.text}</p>
+                            <span className={cn("text-[10px] px-1.5 py-0.5 rounded border font-semibold uppercase tracking-wider shrink-0",
+                              q.difficulty === "easy" ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/25" :
+                              q.difficulty === "hard" ? "bg-rose-500/15 text-rose-400 border-rose-500/25" :
+                              "bg-amber-500/15 text-amber-400 border-amber-500/25")}>{q.difficulty}</span>
+                          </div>
+                          <div className="space-y-1.5">
+                            {q.options.map((opt, i) => (
+                              <div key={i} className={cn("flex items-center gap-2 px-3 py-1.5 rounded text-xs border",
+                                i === q.correctOption ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-300" : "bg-muted/30 border-border text-muted-foreground")}>
+                                <span className="font-mono font-bold shrink-0">{String.fromCharCode(65 + i)}</span>
+                                <span>{opt}</span>
+                                {i === q.correctOption && <CheckCircle2 className="w-3 h-3 ml-auto shrink-0" />}
+                              </div>
+                            ))}
+                          </div>
+                          <div className="bg-muted/30 rounded-lg px-3 py-2">
+                            <p className="text-[11px] text-muted-foreground leading-relaxed"><span className="font-semibold text-foreground">Explanation: </span>{q.explanation}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <button onClick={saveMCQs} disabled={aiSaving}
+                      className="w-full flex items-center justify-center gap-2 py-3 bg-emerald-500 text-white text-sm font-bold rounded-xl hover:bg-emerald-400 transition-colors disabled:opacity-50">
+                      <Save className="w-4 h-4" /> {aiSaving ? "Saving…" : `Save ${aiGenerated.length} Questions to Bank`}
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* ── SMART EXTRACTOR ── */}
+            {aiMode === "extractor" && (
+            <div className="contents">
 
             {/* ── STEP 1: Content Input ── */}
             <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
@@ -2184,6 +2321,7 @@ export default function AdminPanel() {
                 </button>
               </div>
             )}
+            </div>)}
 
             {/* ── AI Question Selector Agent ── */}
             <div className="border-t border-border pt-6 space-y-4">
