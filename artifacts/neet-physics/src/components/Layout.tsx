@@ -1,17 +1,18 @@
 import { Link, useLocation } from "wouter";
-import { BookOpen, LayoutDashboard, FlaskConical, ClipboardList, LogOut, Trophy, Hourglass, XCircle, Sparkles } from "lucide-react";
+import { BookOpen, LayoutDashboard, FlaskConical, ClipboardList, LogOut, Trophy, Hourglass, XCircle, Sparkles, CalendarDays } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
 import { useGamification } from "@/hooks/useGamification";
 import RankBadge from "@/components/RankBadge";
 
 const navItems = [
-  { href: "/",           label: "Dashboard",   icon: LayoutDashboard, special: false },
-  { href: "/topics",     label: "Topics",       icon: BookOpen, special: false },
-  { href: "/practice",   label: "Practice",     icon: FlaskConical, special: false },
-  { href: "/tests",      label: "Mock Tests",   icon: ClipboardList, special: false },
-  { href: "/leaderboard",label: "Leaderboard",  icon: Trophy, special: false },
-  { href: "/ai-tutor",   label: "AI Tutor",     icon: Sparkles, special: true },
+  { href: "/",              label: "Dashboard",      icon: LayoutDashboard, special: false },
+  { href: "/topics",        label: "Topics",          icon: BookOpen, special: false },
+  { href: "/daily-practice",label: "Daily Practice",  icon: CalendarDays, special: false },
+  { href: "/practice",      label: "Practice",        icon: FlaskConical, special: false },
+  { href: "/tests",         label: "Mock Tests",      icon: ClipboardList, special: false },
+  { href: "/leaderboard",   label: "Leaderboard",     icon: Trophy, special: false },
+  { href: "/ai-tutor",      label: "AI Tutor",        icon: Sparkles, special: true },
 ];
 
 export default function Layout({ children }: { children: React.ReactNode }) {

@@ -33,6 +33,8 @@ const TYPE_LABEL: Record<string, { label: string; color: string }> = {
   mastery_chapter: { label: "Chapter", color: "bg-primary/15 text-primary border-primary/20" },
   mastery_class:   { label: "Full Class", color: "bg-amber-500/15 text-amber-400 border-amber-500/20" },
   mastery_final:   { label: "Final", color: "bg-rose-500/15 text-rose-400 border-rose-500/20" },
+  short:           { label: "Short Test", color: "bg-emerald-500/15 text-emerald-400 border-emerald-500/20" },
+  long:            { label: "Long Test", color: "bg-violet-500/15 text-violet-400 border-violet-500/20" },
 };
 
 export default function Tests() {
@@ -47,8 +49,16 @@ export default function Tests() {
   const isRejected   = user?.role === "student" && user.courseType === "test_only" && user.status === "rejected";
   const isFoundation = user?.role === "student" && user.courseType === "foundation";
 
-  const masteryTests = (allTests ?? []).filter(
-    (t) => t.testType && t.testType !== "practice"
+  const allTestList = allTests ?? [];
+
+  // Short/Long practice tests — visible to ALL students
+  const practiceTests = allTestList.filter(
+    (t) => (t as any).testType === "short" || (t as any).testType === "long"
+  );
+
+  // Mastery tests — only for enrolled Test Series students
+  const masteryTests = allTestList.filter(
+    (t) => t.testType && t.testType !== "practice" && (t as any).testType !== "short" && (t as any).testType !== "long"
   );
 
   const today = new Date();
@@ -105,6 +115,29 @@ export default function Tests() {
       <Link href="/" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
         <ArrowLeft className="w-3.5 h-3.5" /> Back to Dashboard
       </Link>
+
+      {/* ── Practice Tests (Short/Long) — visible to ALL students ── */}
+      {practiceTests.length > 0 && (
+        <div>
+          <div className="mb-3">
+            <h2 className="text-base font-bold text-foreground flex items-center gap-2">
+              <FileText className="w-4 h-4 text-primary" /> Practice Tests
+            </h2>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Short and long tests assigned by your teacher — available to all students</p>
+          </div>
+          <div className="space-y-2.5">
+            {practiceTests.map((test) => (
+              <TestCard
+                key={test.id}
+                test={test as AnyTest}
+                isMastery={true}
+                scores={attemptsByTest[test.id] ?? []}
+                today={today}
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── Header Banner ── */}
       <div className={cn(
@@ -367,7 +400,8 @@ function TestCard({
   today: Date;
 }) {
   const schedDate = test.scheduledDate ? new Date(test.scheduledDate) : null;
-  const isPast = schedDate ? schedDate <= today : false;
+  // No scheduled date = always available; otherwise must be past
+  const isPast = schedDate ? schedDate <= today : true;
   const isToday = schedDate
     ? schedDate.toDateString() === today.toDateString()
     : false;
@@ -377,7 +411,7 @@ function TestCard({
 
   const dateStr = schedDate
     ? schedDate.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
-    : "—";
+    : "Open";
 
   const canAttempt = isMastery && isPast;
 
