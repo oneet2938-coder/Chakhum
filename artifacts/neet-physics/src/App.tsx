@@ -10,6 +10,7 @@ import PendingApprovalScreen from "@/pages/PendingApprovalScreen";
 import Dashboard from "@/pages/Dashboard";
 import Topics from "@/pages/Topics";
 import TopicDetail from "@/pages/TopicDetail";
+import SubtopicDetail from "@/pages/SubtopicDetail";
 import Practice from "@/pages/Practice";
 import Tests from "@/pages/Tests";
 import TestDetail from "@/pages/TestDetail";
@@ -28,6 +29,7 @@ function StudentApp() {
         <Route path="/" component={Dashboard} />
         <Route path="/topics" component={Topics} />
         <Route path="/topics/:id" component={TopicDetail} />
+        <Route path="/topics/:id/subtopics/:subtopicId" component={SubtopicDetail} />
         <Route path="/practice" component={Practice} />
         <Route path="/tests" component={Tests} />
         <Route path="/tests/:id" component={TestDetail} />

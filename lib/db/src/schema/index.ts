@@ -1,4 +1,5 @@
 export * from "./topics";
+export * from "./subtopics";
 export * from "./questions";
 export * from "./tests";
 export * from "./testQuestions";
