@@ -82,6 +82,102 @@ correctOption is 0-indexed (0=A, 1=B, 2=C, 3=D). difficulty must be "easy", "med
   }
 });
 
+// ── Step 1: Analyze content and list all questions found ──
+router.post("/ai/analyze-content", async (req, res) => {
+  const { text, imageBase64, imageMediaType } = req.body;
+  if (!text && !imageBase64) return res.status(400).json({ error: "Provide text or image" });
+
+  const systemPrompt = `You are an expert physics teacher reading a question paper or set of notes.
+Your job is to identify ALL distinct questions or problems present in the given content.
+
+For each question found, provide:
+- Its number as it appears (Q1, Q2, etc. or Problem 1, 1., etc.) — use sequential integers
+- A brief 1-line preview of what the question is about
+- The topic/concept it tests (e.g. "Kinematics", "Newton's Laws", "Optics")
+
+Return ONLY this exact JSON, no markdown:
+{"found":[{"number":1,"preview":"A ball is thrown upward with velocity 20 m/s...","topic":"Kinematics"},{"number":2,"preview":"...","topic":"..."}],"total":5}`;
+
+  const userContent: any[] = [];
+  if (imageBase64 && imageMediaType) {
+    userContent.push({ type: "image", source: { type: "base64", media_type: imageMediaType, data: imageBase64 } });
+    userContent.push({ type: "text", text: "Identify all questions in this image." });
+  } else {
+    userContent.push({ type: "text", text: `Identify all questions in this content:\n\n${text}` });
+  }
+
+  try {
+    const message = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 8192,
+      system: systemPrompt,
+      messages: [{ role: "user", content: userContent }],
+    });
+    const block = message.content[0];
+    if (block.type !== "text") return res.status(500).json({ error: "Unexpected AI response" });
+    let raw = block.text.trim().replace(/^```json\s*/i, "").replace(/\s*```$/i, "");
+    const match = raw.match(/\{[\s\S]*\}/);
+    if (!match) return res.status(500).json({ error: "AI did not return valid JSON", raw: block.text.slice(0, 300) });
+    const parsed = JSON.parse(match[0]);
+    res.json({ found: parsed.found ?? [], total: parsed.total ?? parsed.found?.length ?? 0 });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? "Analysis failed" });
+  }
+});
+
+// ── Step 2: Extract specific questions as proper MCQs ──
+router.post("/ai/extract-selected", async (req, res) => {
+  const { text, imageBase64, imageMediaType, selectedNumbers, instruction } = req.body;
+  if (!text && !imageBase64) return res.status(400).json({ error: "Provide text or image" });
+  if (!selectedNumbers?.length && !instruction) return res.status(400).json({ error: "Specify which questions to extract" });
+
+  const selectionDesc = selectedNumbers?.length
+    ? `Extract ONLY these question numbers: ${selectedNumbers.join(", ")}`
+    : `Extract questions based on this instruction: ${instruction}`;
+
+  const systemPrompt = `You are an expert NEET/JEE Physics question formatter.
+${selectionDesc}
+
+Convert each selected question into a proper 4-option MCQ at NEET/JEE level. If the original question already has options, use them. If not, create 3 plausible wrong options plus the correct answer.
+
+Rules:
+- Each question must have EXACTLY 4 options (A, B, C, D)
+- correctOption is 0-indexed (0=A, 1=B, 2=C, 3=D)
+- Include a clear step-by-step explanation
+- difficulty: "easy", "medium", or "hard"
+- Do NOT include questions not requested
+- Return ONLY raw JSON, no markdown
+
+Return ONLY:
+{"questions":[{"text":"Full question text","options":["A","B","C","D"],"correctOption":0,"explanation":"Step-by-step solution","difficulty":"medium"}]}`;
+
+  const userContent: any[] = [];
+  if (imageBase64 && imageMediaType) {
+    userContent.push({ type: "image", source: { type: "base64", media_type: imageMediaType, data: imageBase64 } });
+    userContent.push({ type: "text", text: `From this image: ${selectionDesc}. Format as NEET MCQs.` });
+  } else {
+    userContent.push({ type: "text", text: `From this content:\n\n${text}\n\n${selectionDesc}. Format as NEET MCQs.` });
+  }
+
+  try {
+    const message = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 8192,
+      system: systemPrompt,
+      messages: [{ role: "user", content: userContent }],
+    });
+    const block = message.content[0];
+    if (block.type !== "text") return res.status(500).json({ error: "Unexpected AI response" });
+    let raw = block.text.trim().replace(/^```json\s*/i, "").replace(/\s*```$/i, "");
+    const match = raw.match(/\{[\s\S]*\}/);
+    if (!match) return res.status(500).json({ error: "AI did not return valid JSON", raw: block.text.slice(0, 300) });
+    const parsed = JSON.parse(match[0]);
+    res.json({ questions: parsed.questions ?? [] });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? "Extraction failed" });
+  }
+});
+
 function toPgArray(arr: string[]): string {
   return "{" + arr.map((s) => '"' + s.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"').join(",") + "}";
 }

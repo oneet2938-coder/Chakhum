@@ -191,6 +191,13 @@ export default function AdminPanel() {
   const [aiError, setAiError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Smart MCQ Extractor (2-step flow)
+  type ExtractPhase = "input" | "analyzing" | "analyzed" | "extracting" | "extracted";
+  const [extractPhase, setExtractPhase] = useState<ExtractPhase>("input");
+  const [foundQuestions, setFoundQuestions] = useState<{ number: number; preview: string; topic: string }[]>([]);
+  const [selectedQNums, setSelectedQNums] = useState<Set<number>>(new Set());
+  const [extractError, setExtractError] = useState<string | null>(null);
+
   // AI Agent tab
   const [agentInstruction, setAgentInstruction] = useState("");
   const [agentTopicId, setAgentTopicId] = useState<number | "">("");
@@ -433,6 +440,65 @@ export default function AdminPanel() {
     } finally {
       setAiLoading(false);
     }
+  }
+
+  async function analyzeContent() {
+    if (!aiText && !aiImageB64) return;
+    setExtractPhase("analyzing");
+    setExtractError(null);
+    setFoundQuestions([]);
+    setSelectedQNums(new Set());
+    setAiGenerated([]);
+    try {
+      const res = await fetch("/api/ai/analyze-content", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: aiText || undefined, imageBase64: aiImageB64 || undefined, imageMediaType: aiImageMime || undefined }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      const list = data.found ?? [];
+      setFoundQuestions(list);
+      setSelectedQNums(new Set(list.map((q: any) => q.number)));
+      setExtractPhase("analyzed");
+    } catch (e: any) {
+      setExtractError(e.message ?? "Analysis failed");
+      setExtractPhase("input");
+    }
+  }
+
+  async function extractSelected() {
+    if (!selectedQNums.size) return;
+    setExtractPhase("extracting");
+    setExtractError(null);
+    try {
+      const res = await fetch("/api/ai/extract-selected", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: aiText || undefined,
+          imageBase64: aiImageB64 || undefined,
+          imageMediaType: aiImageMime || undefined,
+          selectedNumbers: Array.from(selectedQNums).sort((a, b) => a - b),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setAiGenerated(data.questions ?? []);
+      setExtractPhase("extracted");
+    } catch (e: any) {
+      setExtractError(e.message ?? "Extraction failed");
+      setExtractPhase("analyzed");
+    }
+  }
+
+  function resetExtractor() {
+    setExtractPhase("input");
+    setFoundQuestions([]);
+    setSelectedQNums(new Set());
+    setAiGenerated([]);
+    setExtractError(null);
+    setAiSaved(false);
   }
 
   async function saveMCQs() {
@@ -1749,20 +1815,39 @@ export default function AdminPanel() {
           <div className="space-y-6">
             <div>
               <h2 className="text-base font-bold text-foreground flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-primary" /> AI MCQ Generator
+                <Sparkles className="w-4 h-4 text-primary" /> Smart MCQ Extractor
               </h2>
-              <p className="text-xs text-muted-foreground mt-0.5">Paste text or upload an image — Claude will generate MCQs ready to save to your question bank.</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Paste text or upload an image → AI identifies all questions found → you choose which ones to extract as proper MCQs.
+              </p>
             </div>
 
-            {/* Config */}
+            {/* ── STEP 1: Content Input ── */}
             <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {/* Step indicator */}
+              <div className="flex items-center gap-2">
+                <div className={cn("flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-full border", extractPhase === "input" || extractPhase === "analyzing" ? "bg-primary/15 border-primary/30 text-primary" : "bg-muted/30 border-border text-muted-foreground")}>
+                  <span className="w-4 h-4 rounded-full bg-primary/20 flex items-center justify-center text-[10px]">1</span> Upload Content
+                </div>
+                <div className="h-px w-4 bg-border" />
+                <div className={cn("flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-full border", extractPhase === "analyzed" || extractPhase === "extracting" ? "bg-primary/15 border-primary/30 text-primary" : "bg-muted/30 border-border text-muted-foreground")}>
+                  <span className="w-4 h-4 rounded-full bg-primary/20 flex items-center justify-center text-[10px]">2</span> Select Questions
+                </div>
+                <div className="h-px w-4 bg-border" />
+                <div className={cn("flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-full border", extractPhase === "extracted" ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400" : "bg-muted/30 border-border text-muted-foreground")}>
+                  <span className="w-4 h-4 rounded-full bg-emerald-500/20 flex items-center justify-center text-[10px]">3</span> Extract &amp; Save
+                </div>
+              </div>
+
+              {/* Topic */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Chapter / Topic *</label>
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Chapter / Topic (for saving) *</label>
                   <select
                     value={aiTopicId}
                     onChange={(e) => setAiTopicId(e.target.value ? Number(e.target.value) : "")}
-                    className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/60"
+                    disabled={extractPhase !== "input"}
+                    className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/60 disabled:opacity-50"
                   >
                     <option value="">Select topic…</option>
                     {aiTopics.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -1773,104 +1858,216 @@ export default function AdminPanel() {
                   <select
                     value={aiSubtopicId}
                     onChange={(e) => setAiSubtopicId(e.target.value ? Number(e.target.value) : "")}
-                    disabled={!aiTopicId || aiSubtopics.length === 0}
+                    disabled={extractPhase !== "input" || !aiTopicId || aiSubtopics.length === 0}
                     className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/60 disabled:opacity-50"
                   >
                     <option value="">Any subtopic</option>
                     {aiSubtopics.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
                 </div>
-                <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">No. of Questions</label>
-                  <input
-                    type="number" min={1} max={50}
-                    value={aiCount}
-                    onChange={(e) => setAiCount(Math.min(50, Math.max(1, Number(e.target.value))))}
-                    className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/60"
-                  />
-                </div>
               </div>
 
-              {/* Input: text */}
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                  <FileText className="w-3 h-3" /> Paste Text / Notes
-                </label>
-                <textarea
-                  placeholder="Paste chapter notes, a concept, a problem, or anything you want MCQs about…"
-                  value={aiText}
-                  onChange={(e) => setAiText(e.target.value)}
-                  rows={5}
-                  className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/60 resize-none"
-                />
-              </div>
-
-              {/* Input: image */}
-              <div className="space-y-2">
-                <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                  <ImageUp className="w-3 h-3" /> Or Upload an Image (question paper, diagram, etc.)
-                </label>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImageUpload(f); }}
-                />
-                {aiImageName ? (
-                  <div className="flex items-center gap-3 bg-primary/10 border border-primary/25 rounded-lg px-3 py-2">
-                    <ImageUp className="w-4 h-4 text-primary shrink-0" />
-                    <span className="text-xs text-foreground font-medium truncate flex-1">{aiImageName}</span>
-                    <button onClick={() => { setAiImageB64(null); setAiImageName(null); }} className="text-[11px] text-muted-foreground hover:text-rose-400 transition-colors">Remove</button>
+              {/* Text input */}
+              {extractPhase === "input" && (
+                <>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                      <FileText className="w-3 h-3" /> Paste Text / Questions
+                    </label>
+                    <textarea
+                      placeholder={"Paste your question paper, notes, or any text with physics questions…\n\n1. A ball is thrown upward with v₀ = 20 m/s. Find the maximum height.\n2. State Newton's second law…"}
+                      value={aiText}
+                      onChange={(e) => setAiText(e.target.value)}
+                      rows={7}
+                      className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 resize-none"
+                    />
                   </div>
-                ) : (
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    className="flex items-center gap-2 px-4 py-2.5 bg-muted/40 border border-dashed border-border rounded-lg text-xs text-muted-foreground hover:border-primary/40 hover:text-foreground transition-all w-full justify-center"
-                  >
-                    <ImageUp className="w-4 h-4" /> Click to upload image
-                  </button>
-                )}
-              </div>
 
-              {aiError && (
-                <div className="flex items-center gap-2 text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-lg px-3 py-2">
-                  <AlertCircle className="w-3.5 h-3.5 shrink-0" /> {aiError}
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                      <ImageUp className="w-3 h-3" /> Or Upload Image (question paper photo, scan, etc.)
+                    </label>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImageUpload(f); }}
+                    />
+                    {aiImageName ? (
+                      <div className="flex items-center gap-3 bg-primary/10 border border-primary/25 rounded-lg px-3 py-2">
+                        <ImageUp className="w-4 h-4 text-primary shrink-0" />
+                        <span className="text-xs text-foreground font-medium truncate flex-1">{aiImageName}</span>
+                        <button onClick={() => { setAiImageB64(null); setAiImageName(null); }} className="text-[11px] text-muted-foreground hover:text-rose-400 transition-colors">Remove</button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => fileInputRef.current?.click()}
+                        className="flex items-center gap-2 px-4 py-2.5 bg-muted/40 border border-dashed border-border rounded-lg text-xs text-muted-foreground hover:border-primary/40 hover:text-foreground transition-all w-full justify-center"
+                      >
+                        <ImageUp className="w-4 h-4" /> Click to upload image
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {/* Already have content but in phase 2+ — show summary */}
+              {extractPhase !== "input" && (aiText || aiImageName) && (
+                <div className="flex items-center gap-2 bg-muted/30 border border-border rounded-lg px-3 py-2">
+                  {aiImageName ? <ImageUp className="w-3.5 h-3.5 text-muted-foreground shrink-0" /> : <FileText className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
+                  <span className="text-xs text-muted-foreground truncate flex-1">
+                    {aiImageName ? aiImageName : `${aiText.slice(0, 80)}${aiText.length > 80 ? "…" : ""}`}
+                  </span>
+                  <button onClick={resetExtractor} className="text-[11px] text-muted-foreground hover:text-primary transition-colors shrink-0">Change</button>
                 </div>
               )}
 
+              {/* Error */}
+              {extractError && (
+                <div className="flex items-center gap-2 text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-lg px-3 py-2">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" /> {extractError}
+                </div>
+              )}
+
+              {/* Saved success */}
               {aiSaved && (
                 <div className="flex items-center gap-2 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2">
                   <CheckCircle2 className="w-3.5 h-3.5 shrink-0" /> Questions saved to the question bank!
                 </div>
               )}
 
-              <button
-                onClick={generateMCQs}
-                disabled={aiLoading || (!aiText && !aiImageB64) || !aiTopicId}
-                className="flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground text-sm font-bold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40"
-              >
-                <Sparkles className="w-4 h-4" />
-                {aiLoading ? "Generating…" : `Generate ${aiCount} MCQ${aiCount > 1 ? "s" : ""}`}
-              </button>
+              {/* Analyze button */}
+              {extractPhase === "input" && (
+                <button
+                  onClick={analyzeContent}
+                  disabled={!aiText && !aiImageB64}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground text-sm font-bold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40"
+                >
+                  <Search className="w-4 h-4" />
+                  Analyze Content — Find All Questions
+                </button>
+              )}
+
+              {/* Analyzing spinner */}
+              {extractPhase === "analyzing" && (
+                <div className="flex items-center gap-3 py-2 text-sm text-muted-foreground">
+                  <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin shrink-0" />
+                  Reading your content and identifying all questions…
+                </div>
+              )}
             </div>
 
-            {/* Generated MCQs preview */}
-            {aiGenerated.length > 0 && (
+            {/* ── STEP 2: Question Selection ── */}
+            {(extractPhase === "analyzed" || extractPhase === "extracting") && foundQuestions.length > 0 && (
+              <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-primary" />
+                      AI found {foundQuestions.length} question{foundQuestions.length !== 1 ? "s" : ""}
+                    </h3>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">Check the ones you want to extract as proper NEET MCQs.</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setSelectedQNums(new Set(foundQuestions.map(q => q.number)))}
+                      className="text-[11px] text-primary hover:opacity-75 transition-opacity"
+                    >All</button>
+                    <span className="text-muted-foreground text-[11px]">·</span>
+                    <button
+                      onClick={() => setSelectedQNums(new Set())}
+                      className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                    >None</button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  {foundQuestions.map((q) => (
+                    <label
+                      key={q.number}
+                      className={cn(
+                        "flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all",
+                        selectedQNums.has(q.number)
+                          ? "bg-primary/8 border-primary/30"
+                          : "bg-muted/20 border-border hover:border-border/80"
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedQNums.has(q.number)}
+                        onChange={(e) => {
+                          const next = new Set(selectedQNums);
+                          e.target.checked ? next.add(q.number) : next.delete(q.number);
+                          setSelectedQNums(next);
+                        }}
+                        className="mt-0.5 accent-primary shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="text-[11px] font-bold text-primary/80">Q{q.number}</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted/50 border border-border text-muted-foreground">{q.topic}</span>
+                        </div>
+                        <p className="text-xs text-foreground leading-relaxed">{q.preview}</p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+
+                <button
+                  onClick={extractSelected}
+                  disabled={selectedQNums.size === 0 || extractPhase === "extracting"}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground text-sm font-bold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40"
+                >
+                  {extractPhase === "extracting" ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      Extracting {selectedQNums.size} question{selectedQNums.size !== 1 ? "s" : ""}…
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4" />
+                      Extract {selectedQNums.size} Selected Question{selectedQNums.size !== 1 ? "s" : ""} as MCQs
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+
+            {/* No questions found */}
+            {extractPhase === "analyzed" && foundQuestions.length === 0 && (
+              <div className="bg-card border border-card-border rounded-xl p-6 text-center space-y-2">
+                <Search className="w-7 h-7 text-muted-foreground mx-auto opacity-40" />
+                <p className="text-sm text-muted-foreground">No distinct questions found in the content.</p>
+                <p className="text-xs text-muted-foreground/60">Try pasting more specific question text.</p>
+                <button onClick={resetExtractor} className="text-xs text-primary hover:opacity-75 mt-2">Start over</button>
+              </div>
+            )}
+
+            {/* ── STEP 3: Extracted MCQs ── */}
+            {extractPhase === "extracted" && aiGenerated.length > 0 && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                    <Eye className="w-4 h-4 text-primary" /> Generated MCQs ({aiGenerated.length})
+                    <Eye className="w-4 h-4 text-emerald-400" /> Extracted MCQs ({aiGenerated.length})
                   </h3>
-                  <button
-                    onClick={saveMCQs}
-                    disabled={aiSaving}
-                    className="flex items-center gap-2 px-4 py-1.5 bg-emerald-500 text-white text-xs font-bold rounded-lg hover:bg-emerald-400 transition-colors disabled:opacity-50"
-                  >
-                    <Save className="w-3.5 h-3.5" />
-                    {aiSaving ? "Saving…" : "Save All to Question Bank"}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button onClick={resetExtractor} className="text-[11px] text-muted-foreground hover:text-foreground transition-colors px-2 py-1">Extract more</button>
+                    <button
+                      onClick={saveMCQs}
+                      disabled={aiSaving || !aiTopicId}
+                      className="flex items-center gap-2 px-4 py-1.5 bg-emerald-500 text-white text-xs font-bold rounded-lg hover:bg-emerald-400 transition-colors disabled:opacity-50"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      {aiSaving ? "Saving…" : "Save All to Question Bank"}
+                    </button>
+                  </div>
                 </div>
+                {!aiTopicId && (
+                  <div className="flex items-center gap-2 text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" /> Select a topic above before saving.
+                  </div>
+                )}
                 <div className="space-y-3">
                   {aiGenerated.map((q, idx) => (
                     <div key={idx} className="bg-card border border-card-border rounded-xl p-4 space-y-3">
@@ -1908,7 +2105,7 @@ export default function AdminPanel() {
                 </div>
                 <button
                   onClick={saveMCQs}
-                  disabled={aiSaving}
+                  disabled={aiSaving || !aiTopicId}
                   className="w-full flex items-center justify-center gap-2 py-3 bg-emerald-500 text-white text-sm font-bold rounded-xl hover:bg-emerald-400 transition-colors disabled:opacity-50"
                 >
                   <Save className="w-4 h-4" />
