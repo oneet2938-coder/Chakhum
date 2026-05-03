@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { questionsTable, topicsTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 
 const router = Router();
@@ -53,6 +53,20 @@ router.get("/questions/:id", async (req, res) => {
 
   if (!row) return res.status(404).json({ error: "Not found" });
   res.json(row);
+});
+
+router.delete("/admin/questions/:id", async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+  await db.delete(questionsTable).where(eq(questionsTable.id, id));
+  res.json({ ok: true });
+});
+
+router.get("/admin/questions/count", async (req, res) => {
+  const result = await db.execute(
+    sql`SELECT COUNT(*)::int as total, topic_id FROM questions GROUP BY topic_id`
+  );
+  res.json(result.rows);
 });
 
 export default router;

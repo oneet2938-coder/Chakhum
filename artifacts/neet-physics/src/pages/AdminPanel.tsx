@@ -4,7 +4,7 @@ import {
   LogOut, Phone, CheckCircle2, XCircle, Target, Settings, Save,
   RefreshCw, Trophy, ShieldCheck, ShieldX, Clock, IndianRupee, ArrowLeftRight, Trash2,
   Sparkles, CalendarDays, Plus, ImageUp, FileText, Eye, BookOpen, AlertCircle,
-  Bot, Search, Copy,
+  Bot, Search, Copy, Filter, ChevronLeft, ChevronRight, X, Database,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
@@ -200,6 +200,22 @@ export default function AdminPanel() {
   const [agentError, setAgentError] = useState<string | null>(null);
   const [agentCopied, setAgentCopied] = useState(false);
 
+  // Question Bank (Overview tab)
+  interface QBQuestion {
+    id: number; topicId: number; topicName: string; text: string;
+    options: string[]; correctOption: number; explanation: string; difficulty: string;
+  }
+  const [qbQuestions, setQbQuestions] = useState<QBQuestion[]>([]);
+  const [qbLoading, setQbLoading] = useState(false);
+  const [qbSearch, setQbSearch] = useState("");
+  const [qbTopicFilter, setQbTopicFilter] = useState<number | "">("");
+  const [qbDiffFilter, setQbDiffFilter] = useState("");
+  const [qbPage, setQbPage] = useState(1);
+  const [qbExpanded, setQbExpanded] = useState<number | null>(null);
+  const [qbDeleteConfirm, setQbDeleteConfirm] = useState<number | null>(null);
+  const [qbTopics, setQbTopics] = useState<TopicOption[]>([]);
+  const QB_PAGE_SIZE = 20;
+
   // Daily Practice tab
   const [dpSets, setDpSets] = useState<PracticeSetRow[]>([]);
   const [dpLoading, setDpLoading] = useState(false);
@@ -340,6 +356,31 @@ export default function AdminPanel() {
       setAiSubtopicId("");
     });
   }, [aiTopicId]);
+
+  // Question Bank fetch
+  const fetchQB = useCallback(async () => {
+    setQbLoading(true);
+    const params = new URLSearchParams({ limit: "2000" });
+    if (qbTopicFilter) params.set("topicId", String(qbTopicFilter));
+    if (qbDiffFilter) params.set("difficulty", qbDiffFilter);
+    const data = await fetch(`/api/questions?${params}`).then((r) => r.json());
+    setQbQuestions(Array.isArray(data) ? data : []);
+    setQbPage(1);
+    setQbLoading(false);
+  }, [qbTopicFilter, qbDiffFilter]);
+
+  useEffect(() => {
+    if (tab !== "overview") return;
+    fetchQB();
+    fetch("/api/topics").then((r) => r.json()).then(setQbTopics);
+  }, [tab, fetchQB]);
+
+  async function deleteQuestion(id: number) {
+    await fetch(`/api/admin/questions/${id}`, { method: "DELETE" });
+    setQbQuestions((prev) => prev.filter((q) => q.id !== id));
+    setQbDeleteConfirm(null);
+    if (qbExpanded === id) setQbExpanded(null);
+  }
 
   // Load daily practice sets
   const fetchDpSets = useCallback(async () => {
@@ -1109,6 +1150,195 @@ export default function AdminPanel() {
                 )}
               </>
             )}
+
+            {/* ── Question Bank ── */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Database className="w-4 h-4 text-primary" />
+                  <h2 className="text-base font-bold text-foreground">Question Bank</h2>
+                  <span className="text-xs bg-primary/10 border border-primary/20 text-primary px-2 py-0.5 rounded-full font-semibold tabular-nums">
+                    {qbQuestions.length} questions
+                  </span>
+                </div>
+                <button
+                  onClick={fetchQB}
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <RefreshCw className={cn("w-3.5 h-3.5", qbLoading && "animate-spin")} /> Refresh
+                </button>
+              </div>
+
+              {/* Filters */}
+              <div className="flex flex-wrap gap-2">
+                <div className="relative flex-1 min-w-[180px]">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder="Search questions…"
+                    value={qbSearch}
+                    onChange={(e) => { setQbSearch(e.target.value); setQbPage(1); }}
+                    className="w-full pl-8 pr-3 py-2 bg-muted/40 border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/60"
+                  />
+                  {qbSearch && (
+                    <button onClick={() => setQbSearch("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+                <select
+                  value={qbTopicFilter}
+                  onChange={(e) => { setQbTopicFilter(e.target.value ? Number(e.target.value) : ""); setQbPage(1); }}
+                  className="bg-muted/40 border border-border rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:border-primary/60 min-w-[140px]"
+                >
+                  <option value="">All topics</option>
+                  {qbTopics.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+                <select
+                  value={qbDiffFilter}
+                  onChange={(e) => { setQbDiffFilter(e.target.value); setQbPage(1); }}
+                  className="bg-muted/40 border border-border rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:border-primary/60"
+                >
+                  <option value="">All difficulty</option>
+                  <option value="easy">Easy</option>
+                  <option value="medium">Medium</option>
+                  <option value="hard">Hard</option>
+                </select>
+              </div>
+
+              {/* Table */}
+              <div className="bg-card border border-card-border rounded-xl overflow-hidden">
+                {qbLoading ? (
+                  <div className="space-y-px">
+                    {[...Array(8)].map((_, i) => <div key={i} className="h-12 bg-muted/20 animate-pulse border-b border-border last:border-0" />)}
+                  </div>
+                ) : (() => {
+                  const filtered = qbQuestions.filter((q) => {
+                    const matchSearch = !qbSearch || q.text.toLowerCase().includes(qbSearch.toLowerCase()) || String(q.id).includes(qbSearch);
+                    return matchSearch;
+                  });
+                  const totalPages = Math.max(1, Math.ceil(filtered.length / QB_PAGE_SIZE));
+                  const paginated = filtered.slice((qbPage - 1) * QB_PAGE_SIZE, qbPage * QB_PAGE_SIZE);
+
+                  if (filtered.length === 0) return (
+                    <div className="py-14 text-center">
+                      <Database className="w-8 h-8 text-muted-foreground mx-auto mb-2 opacity-30" />
+                      <p className="text-sm text-muted-foreground">No questions found.</p>
+                      <p className="text-xs text-muted-foreground/60 mt-1">Try generating some in the AI Tools tab.</p>
+                    </div>
+                  );
+
+                  return (
+                    <>
+                      <div className="divide-y divide-border">
+                        {paginated.map((q) => (
+                          <div key={q.id}>
+                            {/* Row */}
+                            <div
+                              className="flex items-center gap-3 px-4 py-3 hover:bg-muted/15 cursor-pointer transition-colors"
+                              onClick={() => setQbExpanded(qbExpanded === q.id ? null : q.id)}
+                            >
+                              <span className="text-[11px] font-mono text-muted-foreground w-10 shrink-0 tabular-nums">#{q.id}</span>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs text-foreground truncate leading-relaxed">{q.text}</p>
+                                <span className="text-[10px] text-muted-foreground/70">{q.topicName}</span>
+                              </div>
+                              <span className={cn(
+                                "text-[10px] px-1.5 py-0.5 rounded border font-semibold uppercase tracking-wider shrink-0",
+                                q.difficulty === "easy" ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/25" :
+                                q.difficulty === "hard" ? "bg-rose-500/15 text-rose-400 border-rose-500/25" :
+                                "bg-amber-500/15 text-amber-400 border-amber-500/25"
+                              )}>{q.difficulty}</span>
+                              {qbExpanded === q.id
+                                ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                                : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                              }
+                            </div>
+
+                            {/* Expanded detail */}
+                            {qbExpanded === q.id && (
+                              <div className="px-4 pb-4 pt-1 bg-muted/10 border-t border-border space-y-3">
+                                <p className="text-sm text-foreground leading-relaxed">{q.text}</p>
+                                <div className="space-y-1.5">
+                                  {q.options.map((opt, i) => (
+                                    <div key={i} className={cn(
+                                      "flex items-center gap-2 px-3 py-1.5 rounded text-xs border",
+                                      i === q.correctOption
+                                        ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-300"
+                                        : "bg-muted/30 border-border text-muted-foreground"
+                                    )}>
+                                      <span className="font-mono font-bold shrink-0 w-4">{String.fromCharCode(65 + i)}</span>
+                                      <span>{opt}</span>
+                                      {i === q.correctOption && <CheckCircle2 className="w-3 h-3 ml-auto shrink-0" />}
+                                    </div>
+                                  ))}
+                                </div>
+                                {q.explanation && (
+                                  <div className="bg-muted/30 rounded-lg px-3 py-2">
+                                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                                      <span className="font-semibold text-foreground">Explanation: </span>{q.explanation}
+                                    </p>
+                                  </div>
+                                )}
+                                <div className="flex items-center gap-3 pt-1">
+                                  <span className="text-[10px] text-muted-foreground font-mono">ID: {q.id}</span>
+                                  {qbDeleteConfirm === q.id ? (
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); deleteQuestion(q.id); }}
+                                        className="text-[11px] font-bold text-white bg-rose-500 px-2.5 py-1 rounded-md hover:bg-rose-400 transition-colors"
+                                      >Confirm Delete</button>
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); setQbDeleteConfirm(null); }}
+                                        className="text-[11px] text-muted-foreground hover:text-foreground"
+                                      >Cancel</button>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); setQbDeleteConfirm(q.id); }}
+                                      className="flex items-center gap-1 text-[11px] text-rose-400/70 hover:text-rose-400 transition-colors"
+                                    >
+                                      <Trash2 className="w-3 h-3" /> Delete
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Pagination */}
+                      {totalPages > 1 && (
+                        <div className="flex items-center justify-between px-4 py-3 border-t border-border">
+                          <p className="text-[11px] text-muted-foreground">
+                            Showing {(qbPage - 1) * QB_PAGE_SIZE + 1}–{Math.min(qbPage * QB_PAGE_SIZE, filtered.length)} of {filtered.length}
+                          </p>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => setQbPage((p) => Math.max(1, p - 1))}
+                              disabled={qbPage === 1}
+                              className="p-1.5 rounded hover:bg-muted/50 disabled:opacity-30 transition-colors"
+                            >
+                              <ChevronLeft className="w-3.5 h-3.5" />
+                            </button>
+                            <span className="text-[11px] text-muted-foreground px-2 tabular-nums">{qbPage} / {totalPages}</span>
+                            <button
+                              onClick={() => setQbPage((p) => Math.min(totalPages, p + 1))}
+                              disabled={qbPage === totalPages}
+                              className="p-1.5 rounded hover:bg-muted/50 disabled:opacity-30 transition-colors"
+                            >
+                              <ChevronRight className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+            </div>
+
           </div>
         )}
         {/* ── Leaderboard Tab ── */}
