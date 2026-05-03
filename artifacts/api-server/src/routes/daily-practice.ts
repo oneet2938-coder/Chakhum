@@ -34,16 +34,21 @@ router.post("/admin/practice-sets", async (req, res) => {
     return res.status(400).json({ error: "title, practiceDate, and questionIds required" });
   }
 
-  const result = await db.execute(sql`
-    INSERT INTO daily_practice_sets (title, description, practice_date, question_ids)
-    VALUES (${title}, ${description ?? ""}, ${practiceDate}::date, ${JSON.stringify(questionIds)}::integer[])
-    ON CONFLICT (practice_date) DO UPDATE
-      SET title = EXCLUDED.title,
-          description = EXCLUDED.description,
-          question_ids = EXCLUDED.question_ids
-    RETURNING *
-  `);
-  res.status(201).json(result.rows[0]);
+  const pgIntArr = `{${questionIds.join(",")}}`;
+  try {
+    const result = await db.execute(sql`
+      INSERT INTO daily_practice_sets (title, description, practice_date, question_ids)
+      VALUES (${title}, ${description ?? ""}, ${practiceDate}::date, ${pgIntArr}::integer[])
+      ON CONFLICT (practice_date) DO UPDATE
+        SET title = EXCLUDED.title,
+            description = EXCLUDED.description,
+            question_ids = EXCLUDED.question_ids
+      RETURNING *
+    `);
+    res.status(201).json(result.rows[0]);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? "Failed to create practice set" });
+  }
 });
 
 // Admin: delete a practice set

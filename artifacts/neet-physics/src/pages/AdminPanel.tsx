@@ -98,7 +98,7 @@ interface PendingStudent {
   createdAt: string;
 }
 
-type Tab = "approvals" | "daily" | "students" | "overview" | "leaderboard" | "topstudents" | "dailypractice" | "aitools";
+type Tab = "approvals" | "daily" | "students" | "overview" | "leaderboard" | "topstudents" | "dailypractice" | "aitools" | "tests";
 
 interface GeneratedMCQ {
   text: string;
@@ -222,6 +222,27 @@ export default function AdminPanel() {
   const [qbDeleteConfirm, setQbDeleteConfirm] = useState<number | null>(null);
   const [qbTopics, setQbTopics] = useState<TopicOption[]>([]);
   const QB_PAGE_SIZE = 20;
+
+  // Tests tab
+  interface AdminTest {
+    id: number; title: string; description: string; test_type: string;
+    question_count: number; duration_minutes: number; difficulty: string;
+    scheduled_date: string | null;
+  }
+  const [testsList, setTestsList] = useState<AdminTest[]>([]);
+  const [testsLoading, setTestsLoading] = useState(false);
+  const [testTitle, setTestTitle] = useState("");
+  const [testDesc, setTestDesc] = useState("");
+  const [testType, setTestType] = useState<"short" | "long" | "mastery_chapter">("short");
+  const [testQIds, setTestQIds] = useState("");
+  const [testDuration, setTestDuration] = useState(45);
+  const [testDifficulty, setTestDifficulty] = useState("mixed");
+  const [testCreating, setTestCreating] = useState(false);
+  const [testError, setTestError] = useState<string | null>(null);
+  const [testDeleteConfirm, setTestDeleteConfirm] = useState<number | null>(null);
+  const [testEditId, setTestEditId] = useState<number | null>(null);
+  const [testEditQIds, setTestEditQIds] = useState("");
+  const [testEditSaving, setTestEditSaving] = useState(false);
 
   // Daily Practice tab
   const [dpSets, setDpSets] = useState<PracticeSetRow[]>([]);
@@ -402,6 +423,53 @@ export default function AdminPanel() {
     fetchDpSets();
   }, [tab, fetchDpSets]);
 
+  const fetchTests = useCallback(async () => {
+    setTestsLoading(true);
+    try {
+      const data = await fetch("/api/admin/tests").then(r => r.json());
+      setTestsList(Array.isArray(data) ? data : []);
+    } catch { setTestsList([]); }
+    setTestsLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (tab !== "tests") return;
+    fetchTests();
+  }, [tab, fetchTests]);
+
+  async function createAdminTest() {
+    if (!testTitle.trim()) { setTestError("Title is required"); return; }
+    const ids = testQIds.split(",").map(s => parseInt(s.trim())).filter(n => !isNaN(n));
+    if (!ids.length) { setTestError("Enter at least one question ID"); return; }
+    setTestCreating(true); setTestError(null);
+    const res = await fetch("/api/admin/tests", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: testTitle, description: testDesc, testType, questionIds: ids, durationMinutes: testDuration, difficulty: testDifficulty }),
+    });
+    const data = await res.json();
+    setTestCreating(false);
+    if (!res.ok) { setTestError(data.error ?? "Failed to create"); return; }
+    setTestTitle(""); setTestDesc(""); setTestQIds(""); fetchTests();
+  }
+
+  async function deleteAdminTest(id: number) {
+    await fetch(`/api/admin/tests/${id}`, { method: "DELETE" });
+    setTestDeleteConfirm(null); fetchTests();
+  }
+
+  async function saveTestQuestions(id: number) {
+    const ids = testEditQIds.split(",").map(s => parseInt(s.trim())).filter(n => !isNaN(n));
+    if (!ids.length) return;
+    setTestEditSaving(true);
+    await fetch(`/api/admin/tests/${id}/questions`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ questionIds: ids }),
+    });
+    setTestEditSaving(false); setTestEditId(null); setTestEditQIds(""); fetchTests();
+  }
+
   function handleImageUpload(file: File) {
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -559,7 +627,10 @@ export default function AdminPanel() {
       body: JSON.stringify({ title: dpTitle, description: dpDesc, practiceDate: dpDate, questionIds: ids }),
     });
     if (res.ok) { setDpTitle(""); setDpDesc(""); setDpQIds(""); fetchDpSets(); }
-    else { const d = await res.json(); setDpError(d.error ?? "Failed to create"); }
+    else {
+      try { const d = await res.json(); setDpError(d.error ?? "Failed to create"); }
+      catch { setDpError("Server error — check question IDs are valid"); }
+    }
     setDpCreating(false);
   }
 
@@ -638,7 +709,7 @@ export default function AdminPanel() {
 
         {/* ── Tabs ── */}
         <div className="flex gap-1 bg-muted/40 border border-border rounded-lg p-1 w-fit flex-wrap">
-          {([ ["approvals", "✅ Approvals"], ["daily", "Daily Report"], ["students", "All Students"], ["overview", "Overview"], ["leaderboard", "💎 Leaderboard"], ["topstudents", "🏅 Top Students"], ["dailypractice", "📅 Daily Practice"], ["aitools", "🤖 AI Tools"] ] as [Tab, string][]).map(([id, label]) => (
+          {([ ["approvals", "✅ Approvals"], ["daily", "Daily Report"], ["students", "All Students"], ["overview", "Overview"], ["leaderboard", "💎 Leaderboard"], ["topstudents", "🏅 Top Students"], ["tests", "📝 Tests"], ["dailypractice", "📅 Daily Practice"], ["aitools", "🤖 AI Tools"] ] as [Tab, string][]).map(([id, label]) => (
             <button
               key={id}
               onClick={() => setTab(id)}
@@ -2234,6 +2305,232 @@ export default function AdminPanel() {
               )}
             </div>
 
+          </div>
+        )}
+
+        {/* ── TESTS TAB ── */}
+        {tab === "tests" && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-base font-bold text-foreground flex items-center gap-2">
+                <ClipboardList className="w-4 h-4 text-primary" /> Tests Manager
+              </h2>
+              <p className="text-xs text-muted-foreground mt-0.5">Create short or long tests from your question bank, and manage the Mastery Test Series.</p>
+            </div>
+
+            {/* ── Create New Test ── */}
+            <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <Plus className="w-4 h-4 text-primary" /> Create New Test
+              </h3>
+
+              {testError && (
+                <div className="flex items-center gap-2 text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-lg px-3 py-2">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" /> {testError}
+                </div>
+              )}
+
+              {/* Test type selector */}
+              <div className="grid grid-cols-3 gap-2">
+                {([
+                  ["short", "Short Test", "Up to 45 questions · 45 min"],
+                  ["long", "Long Test", "Up to 180 questions · 3 hrs"],
+                  ["mastery_chapter", "Mastery Chapter", "Chapter mastery test"],
+                ] as [typeof testType, string, string][]).map(([val, label, desc]) => (
+                  <button
+                    key={val}
+                    onClick={() => {
+                      setTestType(val);
+                      setTestDuration(val === "short" ? 45 : val === "long" ? 180 : 60);
+                    }}
+                    className={cn(
+                      "flex flex-col items-start p-3 rounded-lg border text-left transition-all",
+                      testType === val
+                        ? "bg-primary/10 border-primary/40 text-foreground"
+                        : "bg-muted/30 border-border text-muted-foreground hover:border-border/80"
+                    )}
+                  >
+                    <span className="text-xs font-bold">{label}</span>
+                    <span className="text-[10px] mt-0.5 opacity-70">{desc}</span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Test Title *</label>
+                  <input
+                    type="text"
+                    placeholder={testType === "mastery_chapter" ? "e.g. Mastery Test: Kinematics" : testType === "short" ? "e.g. Quick Optics Quiz" : "e.g. NEET Full Mock #1"}
+                    value={testTitle}
+                    onChange={(e) => setTestTitle(e.target.value)}
+                    className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/60"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Description (optional)</label>
+                  <input
+                    type="text"
+                    placeholder="Short note for students"
+                    value={testDesc}
+                    onChange={(e) => setTestDesc(e.target.value)}
+                    className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/60"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Duration (minutes)</label>
+                  <input
+                    type="number" min={5} max={300}
+                    value={testDuration}
+                    onChange={(e) => setTestDuration(Math.max(5, Number(e.target.value)))}
+                    className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/60"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Difficulty</label>
+                  <select
+                    value={testDifficulty}
+                    onChange={(e) => setTestDifficulty(e.target.value)}
+                    className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/60"
+                  >
+                    <option value="mixed">Mixed</option>
+                    <option value="easy">Easy</option>
+                    <option value="medium">Medium</option>
+                    <option value="hard">Hard</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Question IDs (comma-separated) *</label>
+                <textarea
+                  placeholder="e.g. 31, 32, 45, 67, 88, 101 — get IDs from Overview → Question Bank"
+                  value={testQIds}
+                  onChange={(e) => setTestQIds(e.target.value)}
+                  rows={3}
+                  className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 resize-none font-mono"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  {testQIds.split(",").filter(s => !isNaN(parseInt(s.trim())) && s.trim()).length > 0
+                    ? `${testQIds.split(",").filter(s => !isNaN(parseInt(s.trim())) && s.trim()).length} question(s) entered`
+                    : "Find IDs in the Overview tab → Question Bank"}
+                </p>
+              </div>
+
+              <button
+                onClick={createAdminTest}
+                disabled={testCreating}
+                className="flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground text-sm font-bold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40"
+              >
+                <Plus className="w-4 h-4" />
+                {testCreating ? "Creating…" : "Create Test"}
+              </button>
+            </div>
+
+            {/* ── Existing Tests ── */}
+            <div className="bg-card border border-card-border rounded-xl overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <Database className="w-4 h-4 text-muted-foreground" />
+                  All Tests
+                  <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-muted/50 border border-border text-muted-foreground font-mono">{testsList.length}</span>
+                </h3>
+                <button onClick={fetchTests} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
+                  <RefreshCw className={cn("w-3.5 h-3.5", testsLoading && "animate-spin")} /> Refresh
+                </button>
+              </div>
+
+              {testsLoading ? (
+                <div className="p-8 text-center text-sm text-muted-foreground">Loading tests…</div>
+              ) : testsList.length === 0 ? (
+                <div className="p-8 text-center">
+                  <ClipboardList className="w-8 h-8 text-muted-foreground mx-auto mb-2 opacity-30" />
+                  <p className="text-sm text-muted-foreground">No tests yet. Create one above.</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-border">
+                  {testsList.map((t) => (
+                    <div key={t.id} className="px-4 py-3 space-y-2">
+                      <div className="flex items-start gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-semibold text-foreground truncate">{t.title}</span>
+                            <span className={cn(
+                              "text-[10px] px-1.5 py-0.5 rounded border font-bold uppercase tracking-wider",
+                              t.test_type === "short" ? "bg-blue-500/10 border-blue-500/20 text-blue-400" :
+                              t.test_type === "long" ? "bg-violet-500/10 border-violet-500/20 text-violet-400" :
+                              t.test_type === "mastery_chapter" ? "bg-amber-500/10 border-amber-500/20 text-amber-400" :
+                              "bg-muted/50 border-border text-muted-foreground"
+                            )}>
+                              {t.test_type.replace("_", " ")}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3 mt-1 text-[11px] text-muted-foreground">
+                            <span className="flex items-center gap-1"><Target className="w-3 h-3" />{t.question_count} questions</span>
+                            <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{t.duration_minutes} min</span>
+                            <span className={cn(
+                              "px-1.5 py-0.5 rounded border font-semibold uppercase tracking-wider text-[10px]",
+                              t.difficulty === "easy" ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" :
+                              t.difficulty === "hard" ? "bg-rose-500/10 border-rose-500/20 text-rose-400" :
+                              "bg-muted/30 border-border text-muted-foreground"
+                            )}>{t.difficulty}</span>
+                          </div>
+                          {t.description && <p className="text-[11px] text-muted-foreground/70 mt-0.5">{t.description}</p>}
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            onClick={() => { setTestEditId(t.id === testEditId ? null : t.id); setTestEditQIds(""); }}
+                            className="text-[11px] text-primary hover:opacity-75 transition-opacity px-2 py-1 rounded border border-primary/20 bg-primary/5"
+                          >
+                            {testEditId === t.id ? "Cancel" : "Edit Qs"}
+                          </button>
+                          {testDeleteConfirm === t.id ? (
+                            <div className="flex items-center gap-1">
+                              <button onClick={() => deleteAdminTest(t.id)} className="text-[11px] text-rose-400 hover:text-rose-300 font-bold">Delete</button>
+                              <button onClick={() => setTestDeleteConfirm(null)} className="text-[11px] text-muted-foreground hover:text-foreground">Cancel</button>
+                            </div>
+                          ) : (
+                            <button onClick={() => setTestDeleteConfirm(t.id)} className="p-1.5 text-muted-foreground hover:text-rose-400 transition-colors rounded">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Edit questions inline */}
+                      {testEditId === t.id && (
+                        <div className="mt-2 bg-muted/30 border border-border rounded-lg p-3 space-y-2">
+                          <p className="text-[11px] text-muted-foreground">Enter new question IDs to replace the current set:</p>
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              placeholder="31, 32, 45, 67…"
+                              value={testEditQIds}
+                              onChange={(e) => setTestEditQIds(e.target.value)}
+                              className="flex-1 bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/60 font-mono"
+                            />
+                            <button
+                              onClick={() => saveTestQuestions(t.id)}
+                              disabled={testEditSaving || !testEditQIds.trim()}
+                              className="flex items-center gap-1.5 px-4 py-2 bg-primary text-primary-foreground text-xs font-bold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40"
+                            >
+                              <Save className="w-3.5 h-3.5" />
+                              {testEditSaving ? "Saving…" : "Save"}
+                            </button>
+                          </div>
+                          <p className="text-[10px] text-muted-foreground">
+                            {testEditQIds.split(",").filter(s => !isNaN(parseInt(s.trim())) && s.trim()).length} question ID(s) entered
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
