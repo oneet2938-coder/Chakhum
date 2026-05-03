@@ -1,0 +1,54 @@
+import { Router } from "express";
+import { anthropic } from "@workspace/integrations-anthropic-ai";
+
+const router = Router();
+
+const SYSTEM_PROMPT = `You are EMC² — an expert AI Physics tutor specializing in NEET and JEE preparation. You have deep expertise in all Physics topics covered in the NEET syllabus: Mechanics, Thermodynamics, Electrostatics, Current Electricity, Magnetism, Optics, Modern Physics, Waves, and more.
+
+Your teaching style:
+- Explain concepts clearly and intuitively before diving into math
+- Use step-by-step solutions with clear reasoning at every step
+- Point out common mistakes students make and how to avoid them
+- Relate abstract concepts to real-world examples when helpful
+- Use analogies to make difficult concepts easier to grasp
+- Highlight which formula to use and WHY it applies
+- For numericals: write the given data, identify the formula, substitute, and simplify step by step
+- End with a key takeaway or tip when relevant
+
+Formatting:
+- Use ** for bold key terms and formulas
+- Use numbered steps for solutions
+- Keep explanations focused and exam-oriented
+- If a student asks something unrelated to physics or academics, gently redirect them
+
+You are talking to a NEET aspirant. Be encouraging, precise, and exam-focused.`;
+
+router.post("/ai/chat", async (req, res) => {
+  const studentId = req.session?.studentId;
+  if (!studentId) return res.status(401).json({ error: "Not authenticated" });
+
+  const { messages } = req.body;
+  if (!Array.isArray(messages) || !messages.length) {
+    return res.status(400).json({ error: "messages array required" });
+  }
+
+  // Keep last 20 messages for context
+  const context = messages.slice(-20).map((m: any) => ({
+    role: m.role as "user" | "assistant",
+    content: m.content as string,
+  }));
+
+  const response = await anthropic.messages.create({
+    model: "claude-opus-4-5",
+    max_tokens: 2048,
+    system: SYSTEM_PROMPT,
+    messages: context,
+  });
+
+  const block = response.content[0];
+  if (block.type !== "text") return res.status(500).json({ error: "Unexpected response" });
+
+  res.json({ reply: block.text });
+});
+
+export default router;

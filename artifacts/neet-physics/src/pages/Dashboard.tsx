@@ -1,5 +1,5 @@
 import { useGetProgressSummary, useGetTopicProgress, useListAttempts } from "@workspace/api-client-react";
-import { TrendingUp, Target, BookCheck, ChevronRight, Award, AlertTriangle, Trophy, CalendarDays, CheckCircle2 } from "lucide-react";
+import { TrendingUp, Target, BookCheck, ChevronRight, Award, AlertTriangle, Trophy, CalendarDays, CheckCircle2, Sparkles } from "lucide-react";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
@@ -327,7 +327,7 @@ export default function Dashboard() {
       )}
 
       {/* Quick actions */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Link href="/practice" className="bg-primary/10 border border-primary/20 rounded-lg p-4 hover:bg-primary/15 transition-colors block">
           <Target className="w-5 h-5 text-primary mb-2" />
           <p className="text-sm font-semibold text-foreground">Practice MCQs</p>
@@ -342,6 +342,12 @@ export default function Dashboard() {
           <Trophy className="w-5 h-5 text-yellow-400 mb-2" />
           <p className="text-sm font-semibold text-foreground">Leaderboard</p>
           <p className="text-xs text-muted-foreground mt-0.5">Diamond rankings</p>
+        </Link>
+        <Link href="/ai-tutor" className="bg-gradient-to-br from-violet-500/15 to-primary/5 border border-violet-500/25 rounded-lg p-4 hover:from-violet-500/20 transition-all block relative overflow-hidden">
+          <div className="absolute top-2 right-2 text-[9px] font-black text-violet-400 bg-violet-500/20 border border-violet-500/30 px-1.5 py-0.5 rounded-full">FREE</div>
+          <Sparkles className="w-5 h-5 text-violet-400 mb-2" />
+          <p className="text-sm font-semibold text-foreground">AI Tutor</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Ask any Physics Q</p>
         </Link>
       </div>
     </div>

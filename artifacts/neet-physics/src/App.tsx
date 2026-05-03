@@ -12,6 +12,7 @@ import Topics from "@/pages/Topics";
 import TopicDetail from "@/pages/TopicDetail";
 import SubtopicDetail from "@/pages/SubtopicDetail";
 import DailyPractice from "@/pages/DailyPractice";
+import AiTutor from "@/pages/AiTutor";
 import Practice from "@/pages/Practice";
 import Tests from "@/pages/Tests";
 import TestDetail from "@/pages/TestDetail";
@@ -32,6 +33,7 @@ function StudentApp() {
         <Route path="/topics/:id" component={TopicDetail} />
         <Route path="/topics/:id/subtopics/:subtopicId" component={SubtopicDetail} />
         <Route path="/daily-practice" component={DailyPractice} />
+        <Route path="/ai-tutor" component={AiTutor} />
         <Route path="/practice" component={Practice} />
         <Route path="/tests" component={Tests} />
         <Route path="/tests/:id" component={TestDetail} />

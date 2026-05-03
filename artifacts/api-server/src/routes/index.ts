@@ -12,6 +12,7 @@ import practiceRouter from "./practice";
 import gamificationRouter from "./gamification";
 import aiMcqRouter from "./ai-mcq";
 import dailyPracticeRouter from "./daily-practice";
+import aiTutorRouter from "./ai-tutor";
 
 const router: IRouter = Router();
 
@@ -28,5 +29,6 @@ router.use(practiceRouter);
 router.use(gamificationRouter);
 router.use(aiMcqRouter);
 router.use(dailyPracticeRouter);
+router.use(aiTutorRouter);
 
 export default router;

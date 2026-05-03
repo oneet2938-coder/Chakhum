@@ -1,16 +1,17 @@
 import { Link, useLocation } from "wouter";
-import { BookOpen, LayoutDashboard, FlaskConical, ClipboardList, LogOut, Trophy, Hourglass, XCircle } from "lucide-react";
+import { BookOpen, LayoutDashboard, FlaskConical, ClipboardList, LogOut, Trophy, Hourglass, XCircle, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
 import { useGamification } from "@/hooks/useGamification";
 import RankBadge from "@/components/RankBadge";
 
 const navItems = [
-  { href: "/",           label: "Dashboard",   icon: LayoutDashboard },
-  { href: "/topics",     label: "Topics",       icon: BookOpen },
-  { href: "/practice",   label: "Practice",     icon: FlaskConical },
-  { href: "/tests",      label: "Mock Tests",   icon: ClipboardList },
-  { href: "/leaderboard",label: "Leaderboard",  icon: Trophy },
+  { href: "/",           label: "Dashboard",   icon: LayoutDashboard, special: false },
+  { href: "/topics",     label: "Topics",       icon: BookOpen, special: false },
+  { href: "/practice",   label: "Practice",     icon: FlaskConical, special: false },
+  { href: "/tests",      label: "Mock Tests",   icon: ClipboardList, special: false },
+  { href: "/leaderboard",label: "Leaderboard",  icon: Trophy, special: false },
+  { href: "/ai-tutor",   label: "AI Tutor",     icon: Sparkles, special: true },
 ];
 
 export default function Layout({ children }: { children: React.ReactNode }) {
@@ -33,7 +34,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
         {/* Nav */}
         <nav className="flex-1 px-3 py-4 space-y-0.5">
-          {navItems.map(({ href, label, icon: Icon }) => {
+          {navItems.map(({ href, label, icon: Icon, special }) => {
             const active = href === "/" ? location === "/" : location.startsWith(href);
             return (
               <Link
@@ -42,15 +43,24 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 className={cn(
                   "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-all",
                   active
-                    ? "bg-primary/10 text-primary"
+                    ? special ? "bg-violet-500/15 text-violet-400" : "bg-primary/10 text-primary"
+                    : special
+                    ? "text-violet-400/80 hover:bg-violet-500/10 hover:text-violet-300"
                     : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground",
                   label === "Leaderboard" && !active && "text-yellow-500/80 hover:text-yellow-400"
                 )}
               >
-                <Icon className={cn("w-4 h-4 shrink-0", label === "Leaderboard" && !active && "text-yellow-500/80")} />
+                <Icon className={cn(
+                  "w-4 h-4 shrink-0",
+                  label === "Leaderboard" && !active && "text-yellow-500/80",
+                  special && !active && "text-violet-400/80"
+                )} />
                 {label}
                 {label === "Leaderboard" && !active && (
                   <span className="ml-auto text-[9px] bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 px-1 rounded font-bold">💎</span>
+                )}
+                {special && !active && (
+                  <span className="ml-auto text-[9px] bg-violet-500/20 text-violet-400 border border-violet-500/30 px-1.5 py-0.5 rounded font-bold">FREE</span>
                 )}
               </Link>
             );
