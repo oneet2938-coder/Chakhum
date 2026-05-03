@@ -1,11 +1,12 @@
 import { useGetProgressSummary, useGetTopicProgress, useListAttempts } from "@workspace/api-client-react";
-import { TrendingUp, Target, BookCheck, ChevronRight, Award, AlertTriangle, Trophy } from "lucide-react";
+import { TrendingUp, Target, BookCheck, ChevronRight, Award, AlertTriangle, Trophy, CalendarDays, CheckCircle2 } from "lucide-react";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
 import { useGamification } from "@/hooks/useGamification";
 import RankBadge, { RankIcon } from "@/components/RankBadge";
 import NeetCountdown from "@/components/NeetCountdown";
+import { useEffect, useState } from "react";
 
 function StatCard({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color?: string }) {
   return (
@@ -17,12 +18,22 @@ function StatCard({ label, value, sub, color }: { label: string; value: string |
   );
 }
 
+type DailySet = { id: number; title: string; practiceDate: string; completion: { score: number; total: number } | null } | null;
+
 export default function Dashboard() {
   const { user } = useAuth();
   const { data: summary, isLoading: sumLoading } = useGetProgressSummary();
   const { data: topicProgress } = useGetTopicProgress();
   const { data: attempts } = useListAttempts();
   const { stats: gamification } = useGamification();
+  const [dailySet, setDailySet] = useState<DailySet | undefined>(undefined);
+
+  useEffect(() => {
+    fetch(`${import.meta.env.BASE_URL}api/practice-sets/today`)
+      .then((r) => r.json())
+      .then(setDailySet)
+      .catch(() => setDailySet(null));
+  }, []);
 
   if (sumLoading) {
     return (
@@ -269,6 +280,51 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* Daily Practice Banner */}
+      {dailySet !== undefined && (
+        dailySet ? (
+          <Link
+            href="/daily-practice"
+            className={cn(
+              "block rounded-xl p-4 border transition-all hover:opacity-90",
+              dailySet.completion
+                ? "bg-emerald-500/10 border-emerald-500/25"
+                : "bg-gradient-to-r from-primary/15 to-primary/5 border-primary/30"
+            )}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className={cn(
+                  "w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
+                  dailySet.completion ? "bg-emerald-500/20" : "bg-primary/20"
+                )}>
+                  {dailySet.completion
+                    ? <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                    : <CalendarDays className="w-5 h-5 text-primary" />}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">📅 Today's Practice</p>
+                    {!dailySet.completion && (
+                      <span className="text-[9px] font-black text-primary bg-primary/15 border border-primary/25 px-1.5 py-0.5 rounded-full uppercase tracking-wide animate-pulse">NEW</span>
+                    )}
+                  </div>
+                  <p className="text-sm font-bold text-foreground">{dailySet.title}</p>
+                  {dailySet.completion && (
+                    <p className="text-xs text-emerald-400 font-semibold">
+                      ✓ Completed — {dailySet.completion.score}/{dailySet.completion.total} correct
+                    </p>
+                  )}
+                </div>
+              </div>
+              <ChevronRight className={cn("w-4 h-4 shrink-0",
+                dailySet.completion ? "text-emerald-400" : "text-primary"
+              )} />
+            </div>
+          </Link>
+        ) : null
+      )}
 
       {/* Quick actions */}
       <div className="grid grid-cols-3 gap-3">

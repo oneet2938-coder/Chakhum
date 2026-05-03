@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Users, TrendingUp, ClipboardList, ChevronDown, ChevronUp,
   LogOut, Phone, CheckCircle2, XCircle, Target, Settings, Save,
   RefreshCw, Trophy, ShieldCheck, ShieldX, Clock, IndianRupee, ArrowLeftRight, Trash2,
+  Sparkles, CalendarDays, Plus, ImageUp, FileText, Eye, BookOpen, AlertCircle,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
@@ -96,7 +97,27 @@ interface PendingStudent {
   createdAt: string;
 }
 
-type Tab = "approvals" | "daily" | "students" | "overview" | "leaderboard" | "topstudents";
+type Tab = "approvals" | "daily" | "students" | "overview" | "leaderboard" | "topstudents" | "dailypractice" | "aitools";
+
+interface GeneratedMCQ {
+  text: string;
+  options: string[];
+  correctOption: number;
+  explanation: string;
+  difficulty: string;
+}
+
+interface PracticeSetRow {
+  id: number;
+  title: string;
+  description: string;
+  practice_date: string;
+  question_count: number;
+  completion_count: number;
+}
+
+interface TopicOption { id: number; name: string; }
+interface SubtopicOption { id: number; name: string; }
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
@@ -151,6 +172,34 @@ export default function AdminPanel() {
   // Delete student
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
   const [deleteLoading, setDeleteLoading] = useState<Record<number, boolean>>({});
+
+  // AI Tools tab
+  const [aiText, setAiText] = useState("");
+  const [aiImageB64, setAiImageB64] = useState<string | null>(null);
+  const [aiImageMime, setAiImageMime] = useState<string>("image/jpeg");
+  const [aiImageName, setAiImageName] = useState<string | null>(null);
+  const [aiTopicId, setAiTopicId] = useState<number | "">("");
+  const [aiSubtopicId, setAiSubtopicId] = useState<number | "">("");
+  const [aiCount, setAiCount] = useState(5);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiGenerated, setAiGenerated] = useState<GeneratedMCQ[]>([]);
+  const [aiSaving, setAiSaving] = useState(false);
+  const [aiSaved, setAiSaved] = useState(false);
+  const [aiTopics, setAiTopics] = useState<TopicOption[]>([]);
+  const [aiSubtopics, setAiSubtopics] = useState<SubtopicOption[]>([]);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Daily Practice tab
+  const [dpSets, setDpSets] = useState<PracticeSetRow[]>([]);
+  const [dpLoading, setDpLoading] = useState(false);
+  const [dpTitle, setDpTitle] = useState("");
+  const [dpDesc, setDpDesc] = useState("");
+  const [dpDate, setDpDate] = useState(new Date().toISOString().split("T")[0]);
+  const [dpQIds, setDpQIds] = useState("");
+  const [dpCreating, setDpCreating] = useState(false);
+  const [dpError, setDpError] = useState<string | null>(null);
+  const [dpDeleteConfirm, setDpDeleteConfirm] = useState<number | null>(null);
 
   const fetchApprovals = useCallback(async () => {
     setApprovalsLoading(true);
@@ -267,6 +316,109 @@ export default function AdminPanel() {
     }
   }
 
+  // Load topics for AI Tools
+  useEffect(() => {
+    if (tab !== "aitools") return;
+    fetch("/api/topics").then((r) => r.json()).then(setAiTopics);
+  }, [tab]);
+
+  // Load subtopics when topic changes
+  useEffect(() => {
+    if (!aiTopicId) { setAiSubtopics([]); setAiSubtopicId(""); return; }
+    fetch(`/api/topics/${aiTopicId}`).then((r) => r.json()).then((d) => {
+      setAiSubtopics(d.subtopics ?? []);
+      setAiSubtopicId("");
+    });
+  }, [aiTopicId]);
+
+  // Load daily practice sets
+  const fetchDpSets = useCallback(async () => {
+    setDpLoading(true);
+    const data = await fetch("/api/admin/practice-sets").then((r) => r.json());
+    setDpSets(Array.isArray(data) ? data : []);
+    setDpLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (tab !== "dailypractice") return;
+    fetchDpSets();
+  }, [tab, fetchDpSets]);
+
+  function handleImageUpload(file: File) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const result = e.target?.result as string;
+      const b64 = result.split(",")[1];
+      setAiImageB64(b64);
+      setAiImageMime(file.type);
+      setAiImageName(file.name);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  async function generateMCQs() {
+    if (!aiText && !aiImageB64) return;
+    setAiLoading(true);
+    setAiError(null);
+    setAiGenerated([]);
+    try {
+      const res = await fetch("/api/ai/generate-mcq", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: aiText || undefined,
+          imageBase64: aiImageB64 || undefined,
+          imageMediaType: aiImageMime || undefined,
+          topicId: aiTopicId || undefined,
+          subtopicId: aiSubtopicId || undefined,
+          count: aiCount,
+        }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setAiGenerated(data.questions ?? []);
+    } catch (e: any) {
+      setAiError(e.message ?? "Generation failed");
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
+  async function saveMCQs() {
+    if (!aiGenerated.length || !aiTopicId) return;
+    setAiSaving(true);
+    const res = await fetch("/api/ai/save-questions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ questions: aiGenerated, topicId: aiTopicId, subtopicId: aiSubtopicId || undefined }),
+    });
+    const data = await res.json();
+    setAiSaving(false);
+    if (data.saved) { setAiSaved(true); setAiGenerated([]); setAiText(""); setAiImageB64(null); setAiImageName(null); setTimeout(() => setAiSaved(false), 3000); }
+  }
+
+  async function createPracticeSet() {
+    if (!dpTitle || !dpDate || !dpQIds.trim()) { setDpError("Fill in title, date, and question IDs"); return; }
+    const ids = dpQIds.split(",").map(s => parseInt(s.trim())).filter(n => !isNaN(n));
+    if (!ids.length) { setDpError("Enter valid question IDs"); return; }
+    setDpCreating(true);
+    setDpError(null);
+    const res = await fetch("/api/admin/practice-sets", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: dpTitle, description: dpDesc, practiceDate: dpDate, questionIds: ids }),
+    });
+    if (res.ok) { setDpTitle(""); setDpDesc(""); setDpQIds(""); fetchDpSets(); }
+    else { const d = await res.json(); setDpError(d.error ?? "Failed to create"); }
+    setDpCreating(false);
+  }
+
+  async function deletePracticeSet(id: number) {
+    await fetch(`/api/admin/practice-sets/${id}`, { method: "DELETE" });
+    setDpDeleteConfirm(null);
+    fetchDpSets();
+  }
+
   const completedCount = dailyReport.filter((r) => r.completed).length;
   const pendingCount = dailyReport.filter((r) => !r.completed).length;
 
@@ -336,7 +488,7 @@ export default function AdminPanel() {
 
         {/* ── Tabs ── */}
         <div className="flex gap-1 bg-muted/40 border border-border rounded-lg p-1 w-fit flex-wrap">
-          {([ ["approvals", "✅ Approvals"], ["daily", "Daily Report"], ["students", "All Students"], ["overview", "Overview"], ["leaderboard", "💎 Leaderboard"], ["topstudents", "🏅 Top Students"] ] as [Tab, string][]).map(([id, label]) => (
+          {([ ["approvals", "✅ Approvals"], ["daily", "Daily Report"], ["students", "All Students"], ["overview", "Overview"], ["leaderboard", "💎 Leaderboard"], ["topstudents", "🏅 Top Students"], ["dailypractice", "📅 Daily Practice"], ["aitools", "🤖 AI Tools"] ] as [Tab, string][]).map(([id, label]) => (
             <button
               key={id}
               onClick={() => setTab(id)}
@@ -1194,6 +1346,301 @@ export default function AdminPanel() {
                     </div>
                   );
                 })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── DAILY PRACTICE TAB ── */}
+        {tab === "dailypractice" && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-base font-bold text-foreground">Daily Practice Sets</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">Create a question set for students to complete each day.</p>
+            </div>
+
+            {/* Create form */}
+            <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <Plus className="w-4 h-4 text-primary" /> Create New Set
+              </h3>
+              {dpError && (
+                <div className="flex items-center gap-2 text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-lg px-3 py-2">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" /> {dpError}
+                </div>
+              )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Date</label>
+                  <input
+                    type="date"
+                    value={dpDate}
+                    onChange={(e) => setDpDate(e.target.value)}
+                    className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/60"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Title</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Kinematics Drill"
+                    value={dpTitle}
+                    onChange={(e) => setDpTitle(e.target.value)}
+                    className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/60"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Description (optional)</label>
+                <input
+                  type="text"
+                  placeholder="Short description for students"
+                  value={dpDesc}
+                  onChange={(e) => setDpDesc(e.target.value)}
+                  className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/60"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Question IDs (comma-separated)</label>
+                <textarea
+                  placeholder="e.g. 101, 204, 318, 455, 612"
+                  value={dpQIds}
+                  onChange={(e) => setDpQIds(e.target.value)}
+                  rows={3}
+                  className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/60 resize-none font-mono"
+                />
+                <p className="text-[11px] text-muted-foreground">Find question IDs in the Overview tab → question bank.</p>
+              </div>
+              <button
+                onClick={createPracticeSet}
+                disabled={dpCreating}
+                className="flex items-center gap-2 px-5 py-2 bg-primary text-primary-foreground text-xs font-bold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
+              >
+                <CalendarDays className="w-3.5 h-3.5" />
+                {dpCreating ? "Creating…" : "Create Practice Set"}
+              </button>
+            </div>
+
+            {/* Existing sets */}
+            <div className="bg-card border border-card-border rounded-xl overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+                <h3 className="text-sm font-semibold text-foreground">All Sets</h3>
+                <button onClick={fetchDpSets} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
+                  <RefreshCw className={cn("w-3.5 h-3.5", dpLoading && "animate-spin")} /> Refresh
+                </button>
+              </div>
+              {dpLoading ? (
+                <div className="divide-y divide-border">
+                  {[...Array(3)].map((_, i) => <div key={i} className="h-14 bg-muted/20 animate-pulse" />)}
+                </div>
+              ) : dpSets.length === 0 ? (
+                <div className="py-10 text-center">
+                  <BookOpen className="w-8 h-8 text-muted-foreground mx-auto mb-2 opacity-40" />
+                  <p className="text-sm text-muted-foreground">No practice sets yet.</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-border">
+                  {dpSets.map((s) => (
+                    <div key={s.id} className="flex items-center gap-4 px-4 py-3">
+                      <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                        <CalendarDays className="w-4 h-4 text-primary" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-foreground truncate">{s.title}</p>
+                        <p className="text-[11px] text-muted-foreground">{new Date(s.practice_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })} · {s.question_count} Qs</p>
+                      </div>
+                      <div className="text-center shrink-0">
+                        <p className="text-sm font-bold text-emerald-400 tabular-nums">{s.completion_count}</p>
+                        <p className="text-[10px] text-muted-foreground">completed</p>
+                      </div>
+                      {dpDeleteConfirm === s.id ? (
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button onClick={() => deletePracticeSet(s.id)} className="text-[11px] font-bold text-white bg-rose-500 px-2.5 py-1 rounded-md hover:bg-rose-400 transition-colors">Confirm</button>
+                          <button onClick={() => setDpDeleteConfirm(null)} className="text-[11px] text-muted-foreground hover:text-foreground">Cancel</button>
+                        </div>
+                      ) : (
+                        <button onClick={() => setDpDeleteConfirm(s.id)} className="shrink-0 p-1.5 rounded-md hover:bg-rose-500/10 text-muted-foreground hover:text-rose-400 transition-colors">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── AI TOOLS TAB ── */}
+        {tab === "aitools" && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-base font-bold text-foreground flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-primary" /> AI MCQ Generator
+              </h2>
+              <p className="text-xs text-muted-foreground mt-0.5">Paste text or upload an image — Claude will generate MCQs ready to save to your question bank.</p>
+            </div>
+
+            {/* Config */}
+            <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Chapter / Topic *</label>
+                  <select
+                    value={aiTopicId}
+                    onChange={(e) => setAiTopicId(e.target.value ? Number(e.target.value) : "")}
+                    className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/60"
+                  >
+                    <option value="">Select topic…</option>
+                    {aiTopics.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Subtopic (optional)</label>
+                  <select
+                    value={aiSubtopicId}
+                    onChange={(e) => setAiSubtopicId(e.target.value ? Number(e.target.value) : "")}
+                    disabled={!aiTopicId || aiSubtopics.length === 0}
+                    className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/60 disabled:opacity-50"
+                  >
+                    <option value="">Any subtopic</option>
+                    {aiSubtopics.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">No. of Questions</label>
+                  <input
+                    type="number" min={1} max={10}
+                    value={aiCount}
+                    onChange={(e) => setAiCount(Math.min(10, Math.max(1, Number(e.target.value))))}
+                    className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/60"
+                  />
+                </div>
+              </div>
+
+              {/* Input: text */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                  <FileText className="w-3 h-3" /> Paste Text / Notes
+                </label>
+                <textarea
+                  placeholder="Paste chapter notes, a concept, a problem, or anything you want MCQs about…"
+                  value={aiText}
+                  onChange={(e) => setAiText(e.target.value)}
+                  rows={5}
+                  className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/60 resize-none"
+                />
+              </div>
+
+              {/* Input: image */}
+              <div className="space-y-2">
+                <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                  <ImageUp className="w-3 h-3" /> Or Upload an Image (question paper, diagram, etc.)
+                </label>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImageUpload(f); }}
+                />
+                {aiImageName ? (
+                  <div className="flex items-center gap-3 bg-primary/10 border border-primary/25 rounded-lg px-3 py-2">
+                    <ImageUp className="w-4 h-4 text-primary shrink-0" />
+                    <span className="text-xs text-foreground font-medium truncate flex-1">{aiImageName}</span>
+                    <button onClick={() => { setAiImageB64(null); setAiImageName(null); }} className="text-[11px] text-muted-foreground hover:text-rose-400 transition-colors">Remove</button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-muted/40 border border-dashed border-border rounded-lg text-xs text-muted-foreground hover:border-primary/40 hover:text-foreground transition-all w-full justify-center"
+                  >
+                    <ImageUp className="w-4 h-4" /> Click to upload image
+                  </button>
+                )}
+              </div>
+
+              {aiError && (
+                <div className="flex items-center gap-2 text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-lg px-3 py-2">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" /> {aiError}
+                </div>
+              )}
+
+              {aiSaved && (
+                <div className="flex items-center gap-2 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2">
+                  <CheckCircle2 className="w-3.5 h-3.5 shrink-0" /> Questions saved to the question bank!
+                </div>
+              )}
+
+              <button
+                onClick={generateMCQs}
+                disabled={aiLoading || (!aiText && !aiImageB64) || !aiTopicId}
+                className="flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground text-sm font-bold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40"
+              >
+                <Sparkles className="w-4 h-4" />
+                {aiLoading ? "Generating…" : `Generate ${aiCount} MCQ${aiCount > 1 ? "s" : ""}`}
+              </button>
+            </div>
+
+            {/* Generated MCQs preview */}
+            {aiGenerated.length > 0 && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                    <Eye className="w-4 h-4 text-primary" /> Generated MCQs ({aiGenerated.length})
+                  </h3>
+                  <button
+                    onClick={saveMCQs}
+                    disabled={aiSaving}
+                    className="flex items-center gap-2 px-4 py-1.5 bg-emerald-500 text-white text-xs font-bold rounded-lg hover:bg-emerald-400 transition-colors disabled:opacity-50"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    {aiSaving ? "Saving…" : "Save All to Question Bank"}
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  {aiGenerated.map((q, idx) => (
+                    <div key={idx} className="bg-card border border-card-border rounded-xl p-4 space-y-3">
+                      <div className="flex items-start gap-2">
+                        <span className="text-[11px] font-bold text-muted-foreground shrink-0 mt-0.5">Q{idx + 1}</span>
+                        <p className="text-sm text-foreground leading-relaxed flex-1">{q.text}</p>
+                        <span className={cn(
+                          "text-[10px] px-1.5 py-0.5 rounded border font-semibold uppercase tracking-wider shrink-0",
+                          q.difficulty === "easy" ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/25" :
+                          q.difficulty === "hard" ? "bg-rose-500/15 text-rose-400 border-rose-500/25" :
+                          "bg-amber-500/15 text-amber-400 border-amber-500/25"
+                        )}>
+                          {q.difficulty}
+                        </span>
+                      </div>
+                      <div className="space-y-1.5">
+                        {q.options.map((opt, i) => (
+                          <div key={i} className={cn(
+                            "flex items-center gap-2 px-3 py-1.5 rounded text-xs border",
+                            i === q.correctOption
+                              ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-300"
+                              : "bg-muted/30 border-border text-muted-foreground"
+                          )}>
+                            <span className="font-mono font-bold shrink-0">{String.fromCharCode(65 + i)}</span>
+                            <span>{opt}</span>
+                            {i === q.correctOption && <CheckCircle2 className="w-3 h-3 ml-auto shrink-0" />}
+                          </div>
+                        ))}
+                      </div>
+                      <div className="bg-muted/30 rounded-lg px-3 py-2">
+                        <p className="text-[11px] text-muted-foreground leading-relaxed"><span className="font-semibold text-foreground">Explanation: </span>{q.explanation}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  onClick={saveMCQs}
+                  disabled={aiSaving}
+                  className="w-full flex items-center justify-center gap-2 py-3 bg-emerald-500 text-white text-sm font-bold rounded-xl hover:bg-emerald-400 transition-colors disabled:opacity-50"
+                >
+                  <Save className="w-4 h-4" />
+                  {aiSaving ? "Saving…" : `Save ${aiGenerated.length} Questions to Bank`}
+                </button>
               </div>
             )}
           </div>

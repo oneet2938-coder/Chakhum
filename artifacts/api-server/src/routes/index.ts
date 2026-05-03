@@ -10,6 +10,8 @@ import studentsRouter from "./students";
 import adminRouter from "./admin";
 import practiceRouter from "./practice";
 import gamificationRouter from "./gamification";
+import aiMcqRouter from "./ai-mcq";
+import dailyPracticeRouter from "./daily-practice";
 
 const router: IRouter = Router();
 
@@ -24,5 +26,7 @@ router.use(studentsRouter);
 router.use(adminRouter);
 router.use(practiceRouter);
 router.use(gamificationRouter);
+router.use(aiMcqRouter);
+router.use(dailyPracticeRouter);
 
 export default router;
