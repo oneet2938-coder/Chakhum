@@ -262,6 +262,13 @@ export default function DailyPractice() {
 
       {/* Current question */}
       <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+        {(q as any).imageB64 && (
+          <img
+            src={`data:image/jpeg;base64,${(q as any).imageB64}`}
+            alt="Question diagram"
+            className="max-w-full rounded-lg border border-border"
+          />
+        )}
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-start gap-2 flex-1">
             <span className="text-xs text-muted-foreground font-mono font-bold shrink-0 mt-0.5">Q{currentQ + 1}</span>

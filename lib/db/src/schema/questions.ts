@@ -12,6 +12,7 @@ export const questionsTable = pgTable("questions", {
   explanation: text("explanation").notNull(),
   difficulty: text("difficulty").notNull().default("medium"),
   year: integer("year"),
+  imageB64: text("image_b64"),
 });
 
 export const insertQuestionSchema = createInsertSchema(questionsTable).omit({ id: true });

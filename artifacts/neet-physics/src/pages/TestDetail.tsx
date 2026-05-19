@@ -151,6 +151,13 @@ export default function TestDetail() {
       {currentQ && (
         <div className="bg-card border border-card-border rounded-lg p-5 space-y-4 max-w-2xl">
           <p className="text-xs font-mono text-muted-foreground">Q{currentIdx + 1} of {questions.length}</p>
+          {(currentQ as any).imageB64 && (
+            <img
+              src={`data:image/jpeg;base64,${(currentQ as any).imageB64}`}
+              alt="Question diagram"
+              className="max-w-full rounded-lg border border-border"
+            />
+          )}
           <p className="text-sm text-foreground font-medium leading-relaxed">{currentQ.text}</p>
           <div className="space-y-2">
             {currentQ.options.map((opt, i) => (

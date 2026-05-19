@@ -23,6 +23,7 @@ router.get("/questions", async (req, res) => {
       explanation: questionsTable.explanation,
       difficulty: questionsTable.difficulty,
       year: questionsTable.year,
+      imageB64: questionsTable.imageB64,
     })
     .from(questionsTable)
     .innerJoin(topicsTable, eq(questionsTable.topicId, topicsTable.id))
@@ -46,6 +47,7 @@ router.get("/questions/:id", async (req, res) => {
       explanation: questionsTable.explanation,
       difficulty: questionsTable.difficulty,
       year: questionsTable.year,
+      imageB64: questionsTable.imageB64,
     })
     .from(questionsTable)
     .innerJoin(topicsTable, eq(questionsTable.topicId, topicsTable.id))

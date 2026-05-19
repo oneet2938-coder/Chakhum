@@ -190,7 +190,10 @@ export default function AdminPanel() {
   const [aiTopics, setAiTopics] = useState<TopicOption[]>([]);
   const [aiSubtopics, setAiSubtopics] = useState<SubtopicOption[]>([]);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [pdfParsing, setPdfParsing] = useState(false);
+  const [pdfName, setPdfName] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pdfInputRef = useRef<HTMLInputElement>(null);
 
   // Smart MCQ Extractor (2-step flow)
   type ExtractPhase = "input" | "analyzing" | "analyzed" | "extracting" | "extracted";
@@ -479,8 +482,33 @@ export default function AdminPanel() {
       setAiImageB64(b64);
       setAiImageMime(file.type);
       setAiImageName(file.name);
+      setPdfName(null);
     };
     reader.readAsDataURL(file);
+  }
+
+  async function handlePdfUpload(file: File) {
+    setPdfParsing(true);
+    setPdfName(file.name);
+    setAiImageB64(null);
+    setAiImageName(null);
+    setAiText("");
+    try {
+      const formData = new FormData();
+      formData.append("pdf", file);
+      const res = await fetch("/api/ai/parse-pdf", { method: "POST", body: formData });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      if (!data.text || data.text.length < 20) {
+        throw new Error("Could not extract readable text from this PDF. Try uploading a photo/scan instead using the image button.");
+      }
+      setAiText(data.text);
+    } catch (e: any) {
+      setAiError(e.message ?? "PDF parsing failed");
+      setPdfName(null);
+    } finally {
+      setPdfParsing(false);
+    }
   }
 
   async function generateMCQs() {
@@ -1885,6 +1913,9 @@ export default function AdminPanel() {
         {/* ── AI TOOLS TAB ── */}
         {tab === "aitools" && (
           <div className="space-y-6">
+            {/* Always-mounted hidden file inputs — shared across both AI modes */}
+            <input ref={pdfInputRef} type="file" accept="application/pdf" className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) handlePdfUpload(f); if (e.target) e.target.value = ""; }} />
             <div>
               <h2 className="text-base font-bold text-foreground flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-primary" /> AI MCQ Tools
@@ -1946,21 +1977,33 @@ export default function AdminPanel() {
                   </div>
                   <div className="space-y-2">
                     <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                      <ImageUp className="w-3 h-3" /> Or Upload Image
+                      <ImageUp className="w-3 h-3" /> Upload PDF or Image
                     </label>
                     <input ref={fileInputRef} type="file" accept="image/*" className="hidden"
                       onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImageUpload(f); }} />
-                    {aiImageName ? (
+                    <input ref={pdfInputRef} type="file" accept="application/pdf" className="hidden"
+                      onChange={(e) => { const f = e.target.files?.[0]; if (f) handlePdfUpload(f); if (e.target) e.target.value = ""; }} />
+                    {(aiImageName || pdfName) ? (
                       <div className="flex items-center gap-3 bg-primary/10 border border-primary/25 rounded-lg px-3 py-2">
-                        <ImageUp className="w-4 h-4 text-primary shrink-0" />
-                        <span className="text-xs text-foreground font-medium truncate flex-1">{aiImageName}</span>
-                        <button onClick={() => { setAiImageB64(null); setAiImageName(null); }} className="text-[11px] text-muted-foreground hover:text-rose-400 transition-colors">Remove</button>
+                        {pdfName ? <FileText className="w-4 h-4 text-primary shrink-0" /> : <ImageUp className="w-4 h-4 text-primary shrink-0" />}
+                        <span className="text-xs text-foreground font-medium truncate flex-1">{pdfName ?? aiImageName}</span>
+                        {pdfParsing && <div className="w-3.5 h-3.5 border-2 border-primary/30 border-t-primary rounded-full animate-spin shrink-0" />}
+                        {!pdfParsing && <button onClick={() => { setAiImageB64(null); setAiImageName(null); setPdfName(null); setAiText(""); }} className="text-[11px] text-muted-foreground hover:text-rose-400 transition-colors">Remove</button>}
                       </div>
                     ) : (
-                      <button onClick={() => fileInputRef.current?.click()}
-                        className="flex items-center gap-2 px-4 py-2.5 bg-muted/40 border border-dashed border-border rounded-lg text-xs text-muted-foreground hover:border-primary/40 hover:text-foreground transition-all w-full justify-center">
-                        <ImageUp className="w-4 h-4" /> Click to upload image
-                      </button>
+                      <div className="flex gap-2">
+                        <button onClick={() => pdfInputRef.current?.click()}
+                          className="flex items-center gap-2 px-4 py-2.5 bg-rose-500/10 border border-dashed border-rose-500/30 rounded-lg text-xs text-rose-300 hover:border-rose-500/50 hover:bg-rose-500/15 transition-all flex-1 justify-center font-medium">
+                          <FileText className="w-4 h-4" /> Upload PDF
+                        </button>
+                        <button onClick={() => fileInputRef.current?.click()}
+                          className="flex items-center gap-2 px-4 py-2.5 bg-muted/40 border border-dashed border-border rounded-lg text-xs text-muted-foreground hover:border-primary/40 hover:text-foreground transition-all flex-1 justify-center">
+                          <ImageUp className="w-4 h-4" /> Upload Image
+                        </button>
+                      </div>
+                    )}
+                    {pdfName && !pdfParsing && aiText && (
+                      <p className="text-[11px] text-emerald-400">✓ PDF parsed — {aiText.length.toLocaleString()} characters extracted. Ready to generate!</p>
                     )}
                   </div>
                   {aiError && (
@@ -2093,7 +2136,7 @@ export default function AdminPanel() {
 
                   <div className="space-y-2">
                     <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                      <ImageUp className="w-3 h-3" /> Or Upload Image (question paper photo, scan, etc.)
+                      <ImageUp className="w-3 h-3" /> Upload PDF or Image (question paper, scan, etc.)
                     </label>
                     <input
                       ref={fileInputRef}
@@ -2102,19 +2145,31 @@ export default function AdminPanel() {
                       className="hidden"
                       onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImageUpload(f); }}
                     />
-                    {aiImageName ? (
+                    {(aiImageName || pdfName) ? (
                       <div className="flex items-center gap-3 bg-primary/10 border border-primary/25 rounded-lg px-3 py-2">
-                        <ImageUp className="w-4 h-4 text-primary shrink-0" />
-                        <span className="text-xs text-foreground font-medium truncate flex-1">{aiImageName}</span>
-                        <button onClick={() => { setAiImageB64(null); setAiImageName(null); }} className="text-[11px] text-muted-foreground hover:text-rose-400 transition-colors">Remove</button>
+                        {pdfName ? <FileText className="w-4 h-4 text-primary shrink-0" /> : <ImageUp className="w-4 h-4 text-primary shrink-0" />}
+                        <span className="text-xs text-foreground font-medium truncate flex-1">{pdfName ?? aiImageName}</span>
+                        {pdfParsing && <div className="w-3.5 h-3.5 border-2 border-primary/30 border-t-primary rounded-full animate-spin shrink-0" />}
+                        {!pdfParsing && <button onClick={() => { setAiImageB64(null); setAiImageName(null); setPdfName(null); setAiText(""); setExtractPhase("input"); }} className="text-[11px] text-muted-foreground hover:text-rose-400 transition-colors">Remove</button>}
                       </div>
                     ) : (
-                      <button
-                        onClick={() => fileInputRef.current?.click()}
-                        className="flex items-center gap-2 px-4 py-2.5 bg-muted/40 border border-dashed border-border rounded-lg text-xs text-muted-foreground hover:border-primary/40 hover:text-foreground transition-all w-full justify-center"
-                      >
-                        <ImageUp className="w-4 h-4" /> Click to upload image
-                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => pdfInputRef.current?.click()}
+                          className="flex items-center gap-2 px-4 py-2.5 bg-rose-500/10 border border-dashed border-rose-500/30 rounded-lg text-xs text-rose-300 hover:border-rose-500/50 hover:bg-rose-500/15 transition-all flex-1 justify-center font-medium"
+                        >
+                          <FileText className="w-4 h-4" /> Upload PDF
+                        </button>
+                        <button
+                          onClick={() => fileInputRef.current?.click()}
+                          className="flex items-center gap-2 px-4 py-2.5 bg-muted/40 border border-dashed border-border rounded-lg text-xs text-muted-foreground hover:border-primary/40 hover:text-foreground transition-all flex-1 justify-center"
+                        >
+                          <ImageUp className="w-4 h-4" /> Upload Image
+                        </button>
+                      </div>
+                    )}
+                    {pdfName && !pdfParsing && aiText && (
+                      <p className="text-[11px] text-emerald-400">✓ PDF parsed — {aiText.length.toLocaleString()} characters extracted. Ready to analyze!</p>
                     )}
                   </div>
                 </>

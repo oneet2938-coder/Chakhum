@@ -1,7 +1,10 @@
 import { Router } from "express";
+import multer from "multer";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
 const router = Router();
 
@@ -192,7 +195,7 @@ router.post("/ai/save-questions", async (req, res) => {
   for (const q of questions) {
     const pgOpts = toPgArray(q.options);
     const result = await db.execute(sql`
-      INSERT INTO questions (topic_id, subtopic_id, text, options, correct_option, explanation, difficulty)
+      INSERT INTO questions (topic_id, subtopic_id, text, options, correct_option, explanation, difficulty, image_b64)
       VALUES (
         ${topicId},
         ${subtopicId ?? null},
@@ -200,7 +203,8 @@ router.post("/ai/save-questions", async (req, res) => {
         ${pgOpts}::text[],
         ${q.correctOption},
         ${q.explanation},
-        ${q.difficulty ?? "medium"}
+        ${q.difficulty ?? "medium"},
+        ${q.imageB64 ?? null}
       )
       RETURNING id
     `);
@@ -208,6 +212,22 @@ router.post("/ai/save-questions", async (req, res) => {
   }
 
   res.json({ saved: inserted.length, ids: inserted });
+});
+
+// ── PDF text extraction ──
+router.post("/ai/parse-pdf", upload.single("pdf"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "No PDF file uploaded" });
+  if (req.file.mimetype !== "application/pdf") return res.status(400).json({ error: "File must be a PDF" });
+
+  try {
+    // Use lib path directly to avoid pdf-parse's test file auto-run on import
+    const pdfParse = (await import("pdf-parse/lib/pdf-parse.js" as string)).default;
+    const data = await pdfParse(req.file.buffer);
+    const text = data.text?.trim() ?? "";
+    res.json({ text, pageCount: data.numpages, charCount: text.length });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? "PDF parsing failed" });
+  }
 });
 
 export default router;
