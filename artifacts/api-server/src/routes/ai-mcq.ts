@@ -26,11 +26,15 @@ Rules:
 - Each question must have EXACTLY ONE correct answer
 - Include a concise but complete explanation for each answer
 - Cover varied difficulty: mix of easy, medium, hard
-- If generating from an image: carefully read ALL text visible and generate questions based on the concepts shown
+- If the source contains a DIAGRAM, FIGURE, CIRCUIT, GRAPH, or TABLE:
+  * Write the question text to reference it naturally (e.g. "In the circuit shown in the figure,", "From the graph shown,", "Refer to the diagram:")
+  * Set "hasImage": true for those questions so the diagram image is attached for students
+  * For questions NOT based on a diagram, set "hasImage": false
+- If generating from plain text with no visual: all questions have "hasImage": false
 - Return ONLY raw JSON, no markdown, no backticks, no prose
 
 Return ONLY this exact JSON:
-{"questions":[{"text":"Question text","options":["Option A","Option B","Option C","Option D"],"correctOption":0,"explanation":"Explanation","difficulty":"easy"}]}
+{"questions":[{"text":"Question text","options":["Option A","Option B","Option C","Option D"],"correctOption":0,"explanation":"Explanation","difficulty":"easy","hasImage":false}]}
 
 correctOption is 0-indexed (0=A, 1=B, 2=C, 3=D). difficulty must be "easy", "medium", or "hard".`;
 
@@ -148,11 +152,13 @@ Rules:
 - correctOption is 0-indexed (0=A, 1=B, 2=C, 3=D)
 - Include a clear step-by-step explanation
 - difficulty: "easy", "medium", or "hard"
+- If the question references a DIAGRAM, FIGURE, CIRCUIT, GRAPH, or TABLE visible in the image, set "hasImage": true and write the question text to reference it naturally (e.g. "In the circuit shown,", "From the graph,")
+- If the question is purely text-based with no visual element, set "hasImage": false
 - Do NOT include questions not requested
 - Return ONLY raw JSON, no markdown
 
 Return ONLY:
-{"questions":[{"text":"Full question text","options":["A","B","C","D"],"correctOption":0,"explanation":"Step-by-step solution","difficulty":"medium"}]}`;
+{"questions":[{"text":"Full question text","options":["A","B","C","D"],"correctOption":0,"explanation":"Step-by-step solution","difficulty":"medium","hasImage":false}]}`;
 
   const userContent: any[] = [];
   if (imageBase64 && imageMediaType) {

@@ -604,7 +604,14 @@ export default function AdminPanel() {
     const res = await fetch("/api/ai/save-questions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ questions: aiGenerated, topicId: aiTopicId, subtopicId: aiSubtopicId || undefined }),
+      body: JSON.stringify({
+        questions: aiGenerated.map((q: any) => ({
+          ...q,
+          imageB64: aiImageB64 && q.hasImage ? aiImageB64 : (q.imageB64 ?? undefined),
+        })),
+        topicId: aiTopicId,
+        subtopicId: aiSubtopicId || undefined,
+      }),
     });
     const data = await res.json();
     setAiSaving(false);
