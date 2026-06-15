@@ -1,74 +1,188 @@
+import { useState, useEffect, useRef } from "react";
 import { Link, useLocation } from "wouter";
-import { BookOpen, LayoutDashboard, FlaskConical, ClipboardList, LogOut, Trophy, Hourglass, XCircle, Sparkles, CalendarDays } from "lucide-react";
+import {
+  BookOpen, LayoutDashboard, FlaskConical, ClipboardList, LogOut,
+  Trophy, Hourglass, XCircle, Sparkles, CalendarDays, Menu, X,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
 import { useGamification } from "@/hooks/useGamification";
 import RankBadge from "@/components/RankBadge";
 
 const navItems = [
-  { href: "/",              label: "Dashboard",      icon: LayoutDashboard, special: false },
-  { href: "/topics",        label: "Topics",          icon: BookOpen, special: false },
-  { href: "/daily-practice",label: "Daily Practice",  icon: CalendarDays, special: false },
-  { href: "/practice",      label: "Practice",        icon: FlaskConical, special: false },
-  { href: "/tests",         label: "Mock Tests",      icon: ClipboardList, special: false },
-  { href: "/leaderboard",   label: "Leaderboard",     icon: Trophy, special: false },
-  { href: "/ai-tutor",      label: "AI Tutor",        icon: Sparkles, special: true },
+  { href: "/",               label: "Dashboard",     icon: LayoutDashboard },
+  { href: "/topics",         label: "Topics",         icon: BookOpen },
+  { href: "/daily-practice", label: "Daily Practice", icon: CalendarDays },
+  { href: "/practice",       label: "Practice",       icon: FlaskConical },
+  { href: "/tests",          label: "Mock Tests",     icon: ClipboardList },
+  { href: "/leaderboard",    label: "Leaderboard",    icon: Trophy, accent: "yellow" },
+  { href: "/ai-tutor",       label: "AI Tutor",       icon: Sparkles, accent: "violet" },
 ];
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const { user, logout } = useAuth();
   const { stats } = useGamification();
+  const [open, setOpen] = useState(false);
+  const drawerRef = useRef<HTMLDivElement>(null);
+
+  // Close drawer on route change (mobile nav)
+  useEffect(() => { setOpen(false); }, [location]);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    function handler(e: MouseEvent) {
+      if (drawerRef.current && !drawerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  // Prevent body scroll when drawer open
+  useEffect(() => {
+    document.body.style.overflow = open ? "hidden" : "";
+    return () => { document.body.style.overflow = ""; };
+  }, [open]);
 
   return (
-    <div className="flex min-h-screen bg-background">
-      <aside className="w-56 shrink-0 border-r border-sidebar-border bg-sidebar flex flex-col">
+    <div className="flex min-h-screen bg-background flex-col">
 
-        {/* Logo */}
-        <div className="px-5 py-4 border-b border-sidebar-border flex items-center gap-2.5">
+      {/* ── Top bar ── */}
+      <header className="sticky top-0 z-30 flex items-center h-12 px-3 border-b border-border bg-background/95 backdrop-blur-sm shrink-0">
+        <button
+          onClick={() => setOpen(true)}
+          className="w-8 h-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors mr-2"
+          aria-label="Open menu"
+        >
+          <Menu className="w-5 h-5" />
+        </button>
+
+        <Link href="/" className="flex items-center gap-2">
+          <img src="/logo.png" alt="EMC" className="w-6 h-6 rounded object-contain" />
+          <span className="text-sm font-bold text-foreground tracking-wide">EMC²</span>
+          <span className="text-[10px] text-muted-foreground hidden sm:block">Physics NEET Prep</span>
+        </Link>
+
+        {/* Diamonds + rank strip in header */}
+        {user?.role === "student" && stats && (
+          <div className="ml-auto flex items-center gap-3">
+            <div className="flex items-center gap-1">
+              <span className="text-sm">💎</span>
+              <span className="text-xs font-bold text-cyan-300 tabular-nums">{stats.diamonds}</span>
+            </div>
+            <div className="hidden sm:block">
+              <RankBadge rank={stats.rank} size="xs" />
+            </div>
+          </div>
+        )}
+
+        {/* Teacher badge */}
+        {user?.role === "teacher" && (
+          <span className="ml-auto text-[10px] bg-primary/20 text-primary border border-primary/30 px-2 py-0.5 rounded-full font-bold">Teacher</span>
+        )}
+      </header>
+
+      {/* ── Approval banners ── */}
+      {user?.role === "student" && user.courseType === "test_only" && user.status === "pending" && (
+        <div className="flex items-center gap-2.5 px-4 py-2 bg-amber-500/10 border-b border-amber-500/20 shrink-0">
+          <Hourglass className="w-3.5 h-3.5 text-amber-400 shrink-0 animate-pulse" />
+          <p className="text-xs text-amber-300 flex-1">
+            <span className="font-semibold">Test Series approval pending</span> — your teacher will unlock access soon.
+          </p>
+          <Link href="/tests" className="text-[10px] font-bold text-amber-400 hover:text-amber-300 shrink-0 underline underline-offset-2">
+            View →
+          </Link>
+        </div>
+      )}
+      {user?.role === "student" && user.courseType === "test_only" && user.status === "rejected" && (
+        <div className="flex items-center gap-2.5 px-4 py-2 bg-rose-500/10 border-b border-rose-500/20 shrink-0">
+          <XCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+          <p className="text-xs text-rose-300">
+            <span className="font-semibold">Test Series access not approved</span> — contact your teacher.
+          </p>
+        </div>
+      )}
+
+      {/* ── Page content ── */}
+      <main className="flex-1 overflow-auto">
+        {children}
+      </main>
+
+      {/* ── Sidebar backdrop ── */}
+      {open && (
+        <div
+          className="fixed inset-0 z-40 bg-background/60 backdrop-blur-sm"
+          aria-hidden
+          onClick={() => setOpen(false)}
+        />
+      )}
+
+      {/* ── Slide-out drawer ── */}
+      <div
+        ref={drawerRef}
+        className={cn(
+          "fixed top-0 left-0 h-full z-50 w-64 bg-sidebar border-r border-sidebar-border flex flex-col transition-transform duration-200 ease-out",
+          open ? "translate-x-0" : "-translate-x-full"
+        )}
+      >
+        {/* Drawer header */}
+        <div className="flex items-center gap-2.5 px-5 py-4 border-b border-sidebar-border">
           <img src="/logo.png" alt="EMC Logo" className="w-7 h-7 rounded-md object-contain" />
-          <div>
+          <div className="flex-1 min-w-0">
             <div className="text-sm font-bold text-foreground tracking-wide">EMC²</div>
             <div className="text-[10px] text-muted-foreground leading-none">Physics NEET Prep</div>
           </div>
+          <button
+            onClick={() => setOpen(false)}
+            className="w-7 h-7 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+            aria-label="Close menu"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
 
-        {/* Nav */}
-        <nav className="flex-1 px-3 py-4 space-y-0.5">
-          {navItems.map(({ href, label, icon: Icon, special }) => {
+        {/* Nav items */}
+        <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+          {navItems.map(({ href, label, icon: Icon, accent }) => {
             const active = href === "/" ? location === "/" : location.startsWith(href);
+            const isYellow = accent === "yellow";
+            const isViolet = accent === "violet";
             return (
               <Link
                 key={href}
                 href={href}
                 className={cn(
-                  "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-all",
+                  "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-all",
                   active
-                    ? special ? "bg-violet-500/15 text-violet-400" : "bg-primary/10 text-primary"
-                    : special
-                    ? "text-violet-400/80 hover:bg-violet-500/10 hover:text-violet-300"
-                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground",
-                  label === "Leaderboard" && !active && "text-yellow-500/80 hover:text-yellow-400"
+                    ? isViolet ? "bg-violet-500/15 text-violet-400"
+                      : isYellow ? "bg-yellow-500/15 text-yellow-400"
+                      : "bg-primary/10 text-primary"
+                    : isViolet ? "text-violet-400/80 hover:bg-violet-500/10 hover:text-violet-300"
+                    : isYellow ? "text-yellow-500/80 hover:bg-yellow-500/10 hover:text-yellow-400"
+                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground"
                 )}
               >
                 <Icon className={cn(
                   "w-4 h-4 shrink-0",
-                  label === "Leaderboard" && !active && "text-yellow-500/80",
-                  special && !active && "text-violet-400/80"
+                  !active && isYellow && "text-yellow-500/80",
+                  !active && isViolet && "text-violet-400/80"
                 )} />
-                {label}
-                {label === "Leaderboard" && !active && (
-                  <span className="ml-auto text-[9px] bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 px-1 rounded font-bold">💎</span>
+                <span className="flex-1">{label}</span>
+                {isYellow && !active && (
+                  <span className="text-[9px] bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 px-1 rounded font-bold">💎</span>
                 )}
-                {special && !active && (
-                  <span className="ml-auto text-[9px] bg-violet-500/20 text-violet-400 border border-violet-500/30 px-1.5 py-0.5 rounded font-bold">FREE</span>
+                {isViolet && !active && (
+                  <span className="text-[9px] bg-violet-500/20 text-violet-400 border border-violet-500/30 px-1.5 py-0.5 rounded font-bold">FREE</span>
                 )}
               </Link>
             );
           })}
         </nav>
 
-        {/* Student rank + diamonds strip */}
+        {/* Rank + diamonds */}
         {user?.role === "student" && stats && (
           <div className="mx-3 mb-2 rounded-lg border border-border bg-muted/20 px-3 py-2 space-y-2">
             <RankBadge rank={stats.rank} size="xs" />
@@ -79,7 +193,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 <span className="text-xs font-bold text-cyan-300 tabular-nums">{stats.diamonds}</span>
               </div>
             </div>
-            {/* Progress to next rank */}
             {stats.next && (
               <div>
                 <div className="h-1 bg-muted rounded-full overflow-hidden">
@@ -94,14 +207,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </div>
         )}
 
-        {/* User info + logout */}
+        {/* User + logout */}
         {user && (
           <div className="px-4 py-3 border-t border-sidebar-border">
             <div className="flex items-center gap-2 mb-2">
-              <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
-                <span className="text-[10px] font-bold text-primary">{user.name[0].toUpperCase()}</span>
+              <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
+                <span className="text-xs font-bold text-primary">{user.name[0].toUpperCase()}</span>
               </div>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="text-xs font-medium text-foreground truncate">{user.name}</p>
                 {user.role === "student" && (
                   <p className="text-[10px] text-muted-foreground truncate">{(user as any).phone}</p>
@@ -109,38 +222,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               </div>
             </div>
             <button
-              onClick={logout}
+              onClick={() => { logout(); setOpen(false); }}
               className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-sidebar-accent rounded-md transition-all"
             >
               <LogOut className="w-3 h-3" /> Sign out
             </button>
           </div>
         )}
-      </aside>
-
-      <main className="flex-1 overflow-auto">
-        {/* Test Series approval banner */}
-        {user?.role === "student" && user.courseType === "test_only" && user.status === "pending" && (
-          <div className="flex items-center gap-2.5 px-4 py-2.5 bg-amber-500/10 border-b border-amber-500/20">
-            <Hourglass className="w-3.5 h-3.5 text-amber-400 shrink-0 animate-pulse" />
-            <p className="text-xs text-amber-300 flex-1">
-              <span className="font-semibold">Test Series approval pending</span> — your teacher will unlock access soon.
-            </p>
-            <Link href="/tests" className="text-[10px] font-bold text-amber-400 hover:text-amber-300 transition-colors shrink-0 underline underline-offset-2">
-              View status →
-            </Link>
-          </div>
-        )}
-        {user?.role === "student" && user.courseType === "test_only" && user.status === "rejected" && (
-          <div className="flex items-center gap-2.5 px-4 py-2.5 bg-rose-500/10 border-b border-rose-500/20">
-            <XCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-            <p className="text-xs text-rose-300 flex-1">
-              <span className="font-semibold">Test Series access not approved</span> — contact your teacher.
-            </p>
-          </div>
-        )}
-        {children}
-      </main>
+      </div>
     </div>
   );
 }

@@ -607,7 +607,9 @@ export default function AdminPanel() {
       body: JSON.stringify({
         questions: aiGenerated.map((q: any) => ({
           ...q,
-          imageB64: aiImageB64 && q.hasImage ? aiImageB64 : (q.imageB64 ?? undefined),
+          // When source was an image upload, attach it to every question so students
+          // always see the diagram/circuit/figure the question refers to.
+          imageB64: aiImageB64 ? aiImageB64 : (q.imageB64 ?? undefined),
         })),
         topicId: aiTopicId,
         subtopicId: aiSubtopicId || undefined,
