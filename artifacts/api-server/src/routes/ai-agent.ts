@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { anthropic } from "@workspace/integrations-anthropic-ai";
+import { getOpenAI } from "../lib/openai";
 import { db } from "@workspace/db";
 import { questionsTable, topicsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
@@ -56,18 +56,17 @@ Return ONLY this exact JSON (no markdown, no prose):
 {"selected":[<array of question IDs as integers>],"reasoning":"<1-2 sentence explanation of what you selected and why>"}`;
 
   try {
-    const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
+    const openai = await getOpenAI();
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
       max_tokens: 8192,
       messages: [{ role: "user", content: prompt }],
     });
 
-    const block = message.content[0];
-    if (block.type !== "text") return res.status(500).json({ error: "Unexpected AI response" });
-
-    let jsonText = block.text.trim().replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "");
+    let jsonText = (response.choices[0].message.content ?? "").trim()
+      .replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "");
     const match = jsonText.match(/\{[\s\S]*\}/);
-    if (!match) return res.status(500).json({ error: "AI did not return valid JSON", raw: block.text.slice(0, 300) });
+    if (!match) return res.status(500).json({ error: "AI did not return valid JSON", raw: jsonText.slice(0, 300) });
 
     const parsed = JSON.parse(match[0]);
     const selectedIds: number[] = Array.isArray(parsed.selected) ? parsed.selected : [];

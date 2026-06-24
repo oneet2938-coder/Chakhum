@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { anthropic } from "@workspace/integrations-anthropic-ai";
+import { getOpenAI } from "../lib/openai";
 
 const router = Router();
 
@@ -39,24 +39,24 @@ router.post("/ai/chat", async (req, res) => {
     return res.status(400).json({ error: "messages array required" });
   }
 
-  // Keep last 20 messages for context
   const context = messages.slice(-20).map((m: any) => ({
     role: m.role as "user" | "assistant",
     content: m.content as string,
   }));
 
   try {
-    const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
+    const openai = await getOpenAI();
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
       max_tokens: 8192,
-      system: SYSTEM_PROMPT,
-      messages: context,
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        ...context,
+      ],
     });
 
-    const block = response.content[0];
-    if (block.type !== "text") return res.status(500).json({ error: "Unexpected response" });
-
-    res.json({ reply: block.text });
+    const reply = response.choices[0].message.content ?? "";
+    res.json({ reply });
   } catch (err: any) {
     res.status(500).json({ error: err?.message ?? "AI request failed" });
   }

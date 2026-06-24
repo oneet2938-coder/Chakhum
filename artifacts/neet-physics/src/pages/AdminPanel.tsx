@@ -98,7 +98,7 @@ interface PendingStudent {
   createdAt: string;
 }
 
-type Tab = "approvals" | "daily" | "students" | "overview" | "leaderboard" | "topstudents" | "dailypractice" | "aitools" | "tests";
+type Tab = "approvals" | "daily" | "students" | "overview" | "leaderboard" | "topstudents" | "dailypractice" | "aitools" | "tests" | "apisettings";
 
 interface GeneratedMCQ {
   text: string;
@@ -210,6 +210,14 @@ export default function AdminPanel() {
   const [agentReasoning, setAgentReasoning] = useState("");
   const [agentError, setAgentError] = useState<string | null>(null);
   const [agentCopied, setAgentCopied] = useState(false);
+
+  // API Key settings
+  const [keyStatus, setKeyStatus] = useState<{ hasEnvKey: boolean; hasDbKey: boolean; maskedKey: string | null } | null>(null);
+  const [newApiKey, setNewApiKey] = useState("");
+  const [savingKey, setSavingKey] = useState(false);
+  const [keySaved, setKeySaved] = useState(false);
+  const [keyError, setKeyError] = useState<string | null>(null);
+  const [removingKey, setRemovingKey] = useState(false);
 
   // Question Bank (Overview tab)
   interface QBQuestion {
@@ -653,6 +661,46 @@ export default function AdminPanel() {
     setTimeout(() => setAgentCopied(false), 2000);
   }
 
+  async function fetchKeyStatus() {
+    try {
+      const res = await fetch("/api/admin/settings/openai-key");
+      if (res.ok) setKeyStatus(await res.json());
+    } catch {}
+  }
+
+  async function saveApiKey() {
+    if (!newApiKey.trim()) return;
+    setSavingKey(true);
+    setKeyError(null);
+    try {
+      const res = await fetch("/api/admin/settings/openai-key", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apiKey: newApiKey.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Save failed");
+      setKeySaved(true);
+      setNewApiKey("");
+      setTimeout(() => setKeySaved(false), 3000);
+      fetchKeyStatus();
+    } catch (e: any) {
+      setKeyError(e.message ?? "Save failed");
+    } finally {
+      setSavingKey(false);
+    }
+  }
+
+  async function removeApiKey() {
+    setRemovingKey(true);
+    try {
+      await fetch("/api/admin/settings/openai-key", { method: "DELETE" });
+      fetchKeyStatus();
+    } finally {
+      setRemovingKey(false);
+    }
+  }
+
   async function createPracticeSet() {
     if (!dpTitle || !dpDate || !dpQIds.trim()) { setDpError("Fill in title, date, and question IDs"); return; }
     const ids = dpQIds.split(",").map(s => parseInt(s.trim())).filter(n => !isNaN(n));
@@ -747,10 +795,10 @@ export default function AdminPanel() {
 
         {/* ── Tabs ── */}
         <div className="flex gap-1 bg-muted/40 border border-border rounded-lg p-1 w-fit flex-wrap">
-          {([ ["approvals", "✅ Approvals"], ["daily", "Daily Report"], ["students", "All Students"], ["overview", "Overview"], ["leaderboard", "💎 Leaderboard"], ["topstudents", "🏅 Top Students"], ["tests", "📝 Tests"], ["dailypractice", "📅 Daily Practice"], ["aitools", "🤖 AI Tools"] ] as [Tab, string][]).map(([id, label]) => (
+          {([ ["approvals", "✅ Approvals"], ["daily", "Daily Report"], ["students", "All Students"], ["overview", "Overview"], ["leaderboard", "💎 Leaderboard"], ["topstudents", "🏅 Top Students"], ["tests", "📝 Tests"], ["dailypractice", "📅 Daily Practice"], ["aitools", "🤖 AI Tools"], ["apisettings", "🔑 API Key"] ] as [Tab, string][]).map(([id, label]) => (
             <button
               key={id}
-              onClick={() => setTab(id)}
+              onClick={() => { setTab(id); if (id === "apisettings") fetchKeyStatus(); }}
               className={cn(
                 "px-4 py-1.5 text-xs font-semibold rounded-md transition-all relative",
                 tab === id
@@ -2732,6 +2780,102 @@ export default function AdminPanel() {
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* ── API Key Settings Tab ── */}
+        {tab === "apisettings" && (
+          <div className="space-y-5">
+            <div className="bg-card border border-card-border rounded-xl p-6 space-y-5">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-primary/15 flex items-center justify-center">
+                  <Settings className="w-4.5 h-4.5 text-primary" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-foreground">OpenAI API Configuration</h2>
+                  <p className="text-xs text-muted-foreground">Manage the OpenAI key used by AI MCQ Generator and AI Tutor</p>
+                </div>
+              </div>
+
+              {/* Current status */}
+              {keyStatus && (
+                <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-2">
+                  <p className="text-xs font-semibold text-foreground uppercase tracking-wide">Current Status</p>
+                  <div className="flex flex-wrap gap-3">
+                    <div className={cn("flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border", keyStatus.hasEnvKey ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-400" : "bg-muted border-border text-muted-foreground")}>
+                      <div className={cn("w-1.5 h-1.5 rounded-full", keyStatus.hasEnvKey ? "bg-emerald-400" : "bg-muted-foreground")} />
+                      Environment variable: {keyStatus.hasEnvKey ? "Set ✓" : "Not set"}
+                    </div>
+                    <div className={cn("flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border", keyStatus.hasDbKey ? "bg-blue-500/10 border-blue-500/25 text-blue-400" : "bg-muted border-border text-muted-foreground")}>
+                      <div className={cn("w-1.5 h-1.5 rounded-full", keyStatus.hasDbKey ? "bg-blue-400" : "bg-muted-foreground")} />
+                      Custom DB key: {keyStatus.hasDbKey ? `Active (${keyStatus.maskedKey})` : "Not set"}
+                    </div>
+                  </div>
+                  {keyStatus.hasDbKey && (
+                    <p className="text-[11px] text-blue-400 mt-1">→ The custom DB key takes priority over the environment variable.</p>
+                  )}
+                  {!keyStatus.hasEnvKey && !keyStatus.hasDbKey && (
+                    <p className="text-[11px] text-rose-400 mt-1">⚠ No API key configured. AI features will fail until a key is set.</p>
+                  )}
+                </div>
+              )}
+
+              {/* Set new key */}
+              <div className="space-y-3">
+                <p className="text-xs font-semibold text-foreground">Set Custom API Key</p>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  Enter an OpenAI API key (starts with <code className="font-mono bg-muted px-1 rounded text-[10px]">sk-...</code>). 
+                  This is stored in your database and will override the environment variable.
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    type="password"
+                    placeholder="sk-..."
+                    value={newApiKey}
+                    onChange={(e) => setNewApiKey(e.target.value)}
+                    className="flex-1 px-3 py-2 bg-muted/50 border border-border rounded-lg text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-all"
+                  />
+                  <button
+                    onClick={saveApiKey}
+                    disabled={savingKey || !newApiKey.trim()}
+                    className={cn(
+                      "flex items-center gap-1.5 text-xs font-semibold px-4 py-2 rounded-lg border transition-all disabled:opacity-40",
+                      keySaved
+                        ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400"
+                        : "bg-primary/10 border-primary/25 text-primary hover:bg-primary/20"
+                    )}
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    {keySaved ? "Saved!" : savingKey ? "Saving…" : "Save Key"}
+                  </button>
+                </div>
+                {keyError && <p className="text-xs text-rose-400">{keyError}</p>}
+              </div>
+
+              {/* Remove custom key */}
+              {keyStatus?.hasDbKey && (
+                <div className="pt-3 border-t border-border space-y-2">
+                  <p className="text-xs font-semibold text-foreground">Remove Custom Key</p>
+                  <p className="text-[11px] text-muted-foreground">Remove the custom DB key and revert to using the environment variable.</p>
+                  <button
+                    onClick={removeApiKey}
+                    disabled={removingKey}
+                    className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 transition-all disabled:opacity-40"
+                  >
+                    {removingKey ? "Removing…" : "Remove Custom Key"}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="bg-card border border-card-border rounded-xl p-5 space-y-3">
+              <p className="text-xs font-semibold text-foreground">How AI Keys Work</p>
+              <ul className="space-y-2 text-[11px] text-muted-foreground leading-relaxed">
+                <li className="flex gap-2"><span className="text-primary font-bold">1.</span> If a custom key is saved in the DB — it is used for all AI calls.</li>
+                <li className="flex gap-2"><span className="text-primary font-bold">2.</span> Otherwise, the <code className="font-mono bg-muted px-1 rounded text-[10px]">OPENAI_API_KEY</code> environment variable is used.</li>
+                <li className="flex gap-2"><span className="text-primary font-bold">3.</span> If neither is set, AI features (MCQ Generator, AI Tutor) will return errors.</li>
+              </ul>
             </div>
           </div>
         )}

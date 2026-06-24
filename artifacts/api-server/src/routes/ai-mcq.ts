@@ -1,6 +1,6 @@
 import { Router } from "express";
 import multer from "multer";
-import { anthropic } from "@workspace/integrations-anthropic-ai";
+import { getOpenAI } from "../lib/openai";
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
 
@@ -42,8 +42,8 @@ correctOption is 0-indexed (0=A, 1=B, 2=C, 3=D). difficulty must be "easy", "med
 
   if (imageBase64 && imageMediaType) {
     userContent.push({
-      type: "image",
-      source: { type: "base64", media_type: imageMediaType, data: imageBase64 },
+      type: "image_url",
+      image_url: { url: `data:${imageMediaType};base64,${imageBase64}` },
     });
     userContent.push({
       type: "text",
@@ -59,28 +59,27 @@ correctOption is 0-indexed (0=A, 1=B, 2=C, 3=D). difficulty must be "easy", "med
   }
 
   try {
-    const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
+    const openai = await getOpenAI();
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
       max_tokens: 8192,
-      system: systemPrompt,
-      messages: [{ role: "user", content: userContent }],
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userContent },
+      ],
     });
 
-    const block = message.content[0];
-    if (block.type !== "text") return res.status(500).json({ error: "Unexpected response type from AI" });
-
-    let jsonText = block.text.trim();
-    // Strip accidental markdown fences
-    jsonText = jsonText.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "");
-    // Extract JSON object if surrounded by text
+    const rawText = response.choices[0].message.content ?? "";
+    let jsonText = rawText.trim()
+      .replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "");
     const jsonMatch = jsonText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return res.status(500).json({ error: "AI did not return valid JSON", raw: block.text.slice(0, 500) });
+    if (!jsonMatch) return res.status(500).json({ error: "AI did not return valid JSON", raw: rawText.slice(0, 500) });
 
     let parsed: any;
     try {
       parsed = JSON.parse(jsonMatch[0]);
     } catch {
-      return res.status(500).json({ error: "Failed to parse AI response", raw: block.text.slice(0, 500) });
+      return res.status(500).json({ error: "Failed to parse AI response", raw: rawText.slice(0, 500) });
     }
 
     res.json({ questions: parsed.questions ?? [], topicId, subtopicId });
@@ -107,24 +106,26 @@ Return ONLY this exact JSON, no markdown:
 
   const userContent: any[] = [];
   if (imageBase64 && imageMediaType) {
-    userContent.push({ type: "image", source: { type: "base64", media_type: imageMediaType, data: imageBase64 } });
+    userContent.push({ type: "image_url", image_url: { url: `data:${imageMediaType};base64,${imageBase64}` } });
     userContent.push({ type: "text", text: "Identify all questions in this image." });
   } else {
     userContent.push({ type: "text", text: `Identify all questions in this content:\n\n${text}` });
   }
 
   try {
-    const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
+    const openai = await getOpenAI();
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
       max_tokens: 8192,
-      system: systemPrompt,
-      messages: [{ role: "user", content: userContent }],
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userContent },
+      ],
     });
-    const block = message.content[0];
-    if (block.type !== "text") return res.status(500).json({ error: "Unexpected AI response" });
-    let raw = block.text.trim().replace(/^```json\s*/i, "").replace(/\s*```$/i, "");
-    const match = raw.match(/\{[\s\S]*\}/);
-    if (!match) return res.status(500).json({ error: "AI did not return valid JSON", raw: block.text.slice(0, 300) });
+    const rawText = (response.choices[0].message.content ?? "").trim()
+      .replace(/^```json\s*/i, "").replace(/\s*```$/i, "");
+    const match = rawText.match(/\{[\s\S]*\}/);
+    if (!match) return res.status(500).json({ error: "AI did not return valid JSON", raw: rawText.slice(0, 300) });
     const parsed = JSON.parse(match[0]);
     res.json({ found: parsed.found ?? [], total: parsed.total ?? parsed.found?.length ?? 0 });
   } catch (err: any) {
@@ -162,24 +163,26 @@ Return ONLY:
 
   const userContent: any[] = [];
   if (imageBase64 && imageMediaType) {
-    userContent.push({ type: "image", source: { type: "base64", media_type: imageMediaType, data: imageBase64 } });
+    userContent.push({ type: "image_url", image_url: { url: `data:${imageMediaType};base64,${imageBase64}` } });
     userContent.push({ type: "text", text: `From this image: ${selectionDesc}. Format as NEET MCQs.` });
   } else {
     userContent.push({ type: "text", text: `From this content:\n\n${text}\n\n${selectionDesc}. Format as NEET MCQs.` });
   }
 
   try {
-    const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
+    const openai = await getOpenAI();
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
       max_tokens: 8192,
-      system: systemPrompt,
-      messages: [{ role: "user", content: userContent }],
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userContent },
+      ],
     });
-    const block = message.content[0];
-    if (block.type !== "text") return res.status(500).json({ error: "Unexpected AI response" });
-    let raw = block.text.trim().replace(/^```json\s*/i, "").replace(/\s*```$/i, "");
-    const match = raw.match(/\{[\s\S]*\}/);
-    if (!match) return res.status(500).json({ error: "AI did not return valid JSON", raw: block.text.slice(0, 300) });
+    const rawText = (response.choices[0].message.content ?? "").trim()
+      .replace(/^```json\s*/i, "").replace(/\s*```$/i, "");
+    const match = rawText.match(/\{[\s\S]*\}/);
+    if (!match) return res.status(500).json({ error: "AI did not return valid JSON", raw: rawText.slice(0, 300) });
     const parsed = JSON.parse(match[0]);
     res.json({ questions: parsed.questions ?? [] });
   } catch (err: any) {
@@ -226,7 +229,6 @@ router.post("/ai/parse-pdf", upload.single("pdf"), async (req, res) => {
   if (req.file.mimetype !== "application/pdf") return res.status(400).json({ error: "File must be a PDF" });
 
   try {
-    // Use lib path directly to avoid pdf-parse's test file auto-run on import
     const pdfParse = (await import("pdf-parse/lib/pdf-parse.js" as string)).default;
     const data = await pdfParse(req.file.buffer);
     const text = data.text?.trim() ?? "";

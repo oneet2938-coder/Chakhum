@@ -11,6 +11,7 @@ import {
   practiceAnswersTable,
 } from "@workspace/db";
 import { eq, sql, isNotNull, inArray } from "drizzle-orm";
+import { getOpenAIKeyStatus } from "../lib/openai";
 
 const router = Router();
 
@@ -419,6 +420,31 @@ router.put("/admin/students/:id/course-type", async (req, res) => {
     .returning();
   if (!updated) return res.status(404).json({ error: "student not found" });
   res.json(updated);
+});
+
+// ── OpenAI API Key management ──────────────────────────────────────────────────
+
+router.get("/admin/settings/openai-key", async (_req, res) => {
+  const status = await getOpenAIKeyStatus();
+  res.json(status);
+});
+
+router.post("/admin/settings/openai-key", async (req, res) => {
+  const { apiKey } = req.body as { apiKey?: string };
+  if (!apiKey || typeof apiKey !== "string" || apiKey.trim().length < 10) {
+    return res.status(400).json({ error: "Valid API key required (must start with sk-...)" });
+  }
+  const key = apiKey.trim();
+  await db
+    .insert(settingsTable)
+    .values({ key: "openai_api_key", value: key })
+    .onConflictDoUpdate({ target: settingsTable.key, set: { value: key } });
+  res.json({ ok: true, message: "API key saved" });
+});
+
+router.delete("/admin/settings/openai-key", async (_req, res) => {
+  await db.delete(settingsTable).where(eq(settingsTable.key, "openai_api_key"));
+  res.json({ ok: true, message: "Custom API key removed, using environment variable" });
 });
 
 export default router;
