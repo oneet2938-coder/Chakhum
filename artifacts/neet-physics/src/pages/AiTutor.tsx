@@ -8,12 +8,12 @@ type Message = { role: "user" | "assistant"; content: string; id: string };
 const SUGGESTED = [
   "Explain Newton's laws with examples",
   "How do I solve projectile motion problems?",
-  "What is the difference between electric field and potential?",
-  "Explain Kirchhoff's laws step by step",
-  "How does a transformer work?",
+  "Explain SN1 vs SN2 reaction mechanisms",
+  "What is the difference between mitosis and meiosis?",
   "Derive the lens maker's equation",
-  "What is the photoelectric effect?",
-  "Explain Doppler effect with formula",
+  "Explain the mechanism of human digestion",
+  "What is hybridization in organic chemistry?",
+  "Explain Mendel's laws of inheritance",
 ];
 
 function formatMessage(text: string) {
@@ -207,7 +207,7 @@ export default function AiTutor() {
           </div>
           <div>
             <h1 className="text-sm font-bold text-foreground">TSM AI Tutor</h1>
-            <p className="text-[11px] text-muted-foreground">Physics expert · Ask anything</p>
+            <p className="text-[11px] text-muted-foreground">Physics · Chemistry · Biology · Ask anything</p>
           </div>
           <div className="ml-auto flex items-center gap-2">
             <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">FREE for all students</span>
@@ -233,9 +233,9 @@ export default function AiTutor() {
               <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500/25 to-primary/15 border border-violet-500/20 flex items-center justify-center mx-auto mb-4">
                 <Sparkles className="w-8 h-8 text-violet-400" />
               </div>
-              <h2 className="text-xl font-black text-foreground mb-1">Your AI Physics Tutor</h2>
+              <h2 className="text-xl font-black text-foreground mb-1">Your AI PCB Tutor</h2>
               <p className="text-sm text-muted-foreground max-w-sm">
-                Ask any Physics question — concepts, derivations, numericals, shortcuts, or exam tips. I'm tuned for NEET.
+                Ask any Physics, Chemistry, or Biology question — concepts, derivations, numericals, shortcuts, or exam tips. I'm tuned for NEET.
               </p>
               <div className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full">
                 <span>✓</span> Worth ₹1,00,000 — Free for all TSM students
@@ -283,7 +283,7 @@ export default function AiTutor() {
               value={input}
               onChange={(e) => { setInput(e.target.value); autoResize(); }}
               onKeyDown={handleKeyDown}
-              placeholder="Ask any Physics question… (Enter to send, Shift+Enter for new line)"
+              placeholder="Ask any Physics, Chemistry or Biology question… (Enter to send, Shift+Enter for new line)"
               rows={1}
               className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground/50 resize-none focus:outline-none leading-relaxed py-1"
               style={{ minHeight: "24px", maxHeight: "160px" }}
@@ -302,7 +302,7 @@ export default function AiTutor() {
             </button>
           </div>
           <p className="text-[10px] text-muted-foreground text-center mt-1.5">
-            TSM AI · Powered by OpenAI · Tuned for NEET Physics
+            TSM AI · Powered by OpenAI · Tuned for NEET Physics, Chemistry & Biology
           </p>
         </div>
       </div>

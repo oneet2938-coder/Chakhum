@@ -58,7 +58,7 @@ export default function Dashboard() {
         <h1 className="text-xl font-bold text-foreground">
           Welcome back, {user?.name?.split(" ")[0]}!
         </h1>
-        <p className="text-sm text-muted-foreground mt-0.5">Your NEET Physics progress at a glance</p>
+        <p className="text-sm text-muted-foreground mt-0.5">Your NEET PCB progress at a glance</p>
       </div>
 
       {/* NEET 2027 Countdown */}
@@ -347,7 +347,7 @@ export default function Dashboard() {
           <div className="absolute top-2 right-2 text-[9px] font-black text-violet-400 bg-violet-500/20 border border-violet-500/30 px-1.5 py-0.5 rounded-full">FREE</div>
           <Sparkles className="w-5 h-5 text-violet-400 mb-2" />
           <p className="text-sm font-semibold text-foreground">AI Tutor</p>
-          <p className="text-xs text-muted-foreground mt-0.5">Ask any Physics Q</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Ask any PCB question</p>
         </Link>
       </div>
     </div>

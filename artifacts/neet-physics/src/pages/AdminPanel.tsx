@@ -205,8 +205,33 @@ interface PracticeSetRow {
   completion_count: number;
 }
 
-interface TopicOption { id: number; name: string; }
+interface TopicOption { id: number; name: string; subject?: string; }
 interface SubtopicOption { id: number; name: string; }
+
+const SUBJECT_GROUP_LABEL: Record<string, string> = {
+  physics: "Physics",
+  chemistry: "Chemistry",
+  biology: "Biology",
+};
+
+function TopicSelectOptions({ topics }: { topics: TopicOption[] }) {
+  const groups: Record<string, TopicOption[]> = {};
+  for (const t of topics) {
+    const key = t.subject ?? "physics";
+    (groups[key] ??= []).push(t);
+  }
+  const order = ["physics", "chemistry", "biology"];
+  const keys = [...order.filter((k) => groups[k]), ...Object.keys(groups).filter((k) => !order.includes(k))];
+  return (
+    <>
+      {keys.map((key) => (
+        <optgroup key={key} label={SUBJECT_GROUP_LABEL[key] ?? key}>
+          {groups[key].map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+        </optgroup>
+      ))}
+    </>
+  );
+}
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
@@ -1589,7 +1614,7 @@ export default function AdminPanel() {
                   className="bg-muted/40 border border-border rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:border-primary/60 min-w-[140px]"
                 >
                   <option value="">All topics</option>
-                  {qbTopics.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  <TopicSelectOptions topics={qbTopics} />
                 </select>
                 <select
                   value={qbDiffFilter}
@@ -2179,7 +2204,7 @@ export default function AdminPanel() {
                       <select value={aiTopicId} onChange={(e) => setAiTopicId(e.target.value ? Number(e.target.value) : "")}
                         className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/60">
                         <option value="">Select topic…</option>
-                        {aiTopics.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                        <TopicSelectOptions topics={aiTopics} />
                       </select>
                     </div>
                     <div className="space-y-1">
@@ -2332,7 +2357,7 @@ export default function AdminPanel() {
                     className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/60 disabled:opacity-50"
                   >
                     <option value="">Select topic…</option>
-                    {aiTopics.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    <TopicSelectOptions topics={aiTopics} />
                   </select>
                 </div>
                 <div className="space-y-1">
@@ -2623,7 +2648,7 @@ export default function AdminPanel() {
                       <select value={aiTopicId} onChange={(e) => setAiTopicId(e.target.value ? Number(e.target.value) : "")}
                         className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/60">
                         <option value="">Select topic…</option>
-                        {aiTopics.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                        <TopicSelectOptions topics={aiTopics} />
                       </select>
                     </div>
                     <div className="space-y-1">
@@ -2815,7 +2840,7 @@ export default function AdminPanel() {
                       className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-violet-500/50 h-[88px]"
                     >
                       <option value="">All topics</option>
-                      {aiTopics.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                      <TopicSelectOptions topics={aiTopics} />
                     </select>
                   </div>
                 </div>

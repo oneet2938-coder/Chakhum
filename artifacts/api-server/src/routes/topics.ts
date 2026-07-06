@@ -6,7 +6,10 @@ import { eq, sql } from "drizzle-orm";
 const router = Router();
 
 router.get("/topics", async (req, res) => {
-  const topics = await db.select().from(topicsTable);
+  const subject = typeof req.query.subject === "string" ? req.query.subject : undefined;
+  const topics = subject
+    ? await db.select().from(topicsTable).where(eq(topicsTable.subject, subject))
+    : await db.select().from(topicsTable);
   const counts = await db
     .select({ topicId: questionsTable.topicId, count: sql<number>`count(*)::int` })
     .from(questionsTable)

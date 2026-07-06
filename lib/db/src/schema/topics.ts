@@ -7,6 +7,8 @@ export const topicsTable = pgTable("topics", {
   name: text("name").notNull(),
   description: text("description").notNull(),
   icon: text("icon").notNull().default("atom"),
+  subject: text("subject").notNull().default("physics"),
+  classLevel: text("class_level").notNull().default("11"),
 });
 
 export const insertTopicSchema = createInsertSchema(topicsTable).omit({ id: true });

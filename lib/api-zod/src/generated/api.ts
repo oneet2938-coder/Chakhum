@@ -15,14 +15,20 @@ export const HealthCheckResponse = zod.object({
 });
 
 /**
- * @summary List all physics topics
+ * @summary List all topics, optionally filtered by subject
  */
+export const ListTopicsQueryParams = zod.object({
+  subject: zod.coerce.string().optional(),
+});
+
 export const ListTopicsResponseItem = zod.object({
   id: zod.number(),
   name: zod.string(),
   description: zod.string(),
   questionCount: zod.number(),
   icon: zod.string(),
+  subject: zod.string(),
+  classLevel: zod.string(),
 });
 export const ListTopicsResponse = zod.array(ListTopicsResponseItem);
 
@@ -39,6 +45,8 @@ export const GetTopicResponse = zod.object({
   description: zod.string(),
   questionCount: zod.number(),
   icon: zod.string(),
+  subject: zod.string(),
+  classLevel: zod.string(),
 });
 
 /**
@@ -47,6 +55,7 @@ export const GetTopicResponse = zod.object({
 export const ListQuestionsQueryParams = zod.object({
   topicId: zod.coerce.number().optional(),
   difficulty: zod.enum(["easy", "medium", "hard"]).optional(),
+  subject: zod.coerce.string().optional(),
   limit: zod.coerce.number().optional(),
 });
 

@@ -63,7 +63,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <Link href="/" className="flex items-center gap-2">
           <img src="/logo.png" alt="EMC" className="w-6 h-6 rounded object-contain" />
           <span className="text-sm font-bold text-foreground tracking-wide">TSM</span>
-          <span className="text-[10px] text-muted-foreground hidden sm:block">Physics NEET Prep</span>
+          <span className="text-[10px] text-muted-foreground hidden sm:block">NEET Prep</span>
         </Link>
 
         {/* Diamonds + rank strip in header */}
@@ -133,7 +133,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <img src="/logo.png" alt="EMC Logo" className="w-7 h-7 rounded-md object-contain" />
           <div className="flex-1 min-w-0">
             <div className="text-sm font-bold text-foreground tracking-wide">TSM</div>
-            <div className="text-[10px] text-muted-foreground leading-none">Physics NEET Prep</div>
+            <div className="text-[10px] text-muted-foreground leading-none">NEET Prep</div>
           </div>
           <button
             onClick={() => setOpen(false)}

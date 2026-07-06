@@ -66,7 +66,7 @@ export default function LoginScreen() {
         <img src="/logo.png" alt="EMC Logo" className="w-12 h-12 rounded-xl object-contain" />
         <div>
           <h1 className="text-xl font-bold text-foreground tracking-wide">TSM</h1>
-          <p className="text-xs text-muted-foreground">Physics NEET Prep</p>
+          <p className="text-xs text-muted-foreground">NEET Prep · Physics · Chemistry · Biology</p>
         </div>
       </div>
 

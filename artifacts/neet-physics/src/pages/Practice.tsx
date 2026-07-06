@@ -26,9 +26,19 @@ function DifficultyPill({ d }: { d: string }) {
   );
 }
 
+type SubjectKey = "physics" | "chemistry" | "biology";
+
+const SUBJECTS: { key: SubjectKey; label: string; emoji: string }[] = [
+  { key: "physics", label: "Physics", emoji: "⚛️" },
+  { key: "chemistry", label: "Chemistry", emoji: "🧪" },
+  { key: "biology", label: "Biology", emoji: "🧬" },
+];
+
 export default function Practice() {
   const { user } = useAuth();
-  const { data: topics } = useListTopics();
+  const [subject, setSubject] = useState<SubjectKey>("physics");
+  const { data: allTopics } = useListTopics();
+  const topics = (allTopics ?? []).filter((t: any) => (t.subject ?? "physics") === subject);
 
   const [selectedTopic, setSelectedTopic] = useState<number | undefined>(undefined);
   const [selectedTopicName, setSelectedTopicName] = useState("");
@@ -41,6 +51,7 @@ export default function Practice() {
 
   const { data: questions } = useListQuestions({
     topicId: selectedTopic,
+    subject: selectedTopic ? undefined : subject,
     difficulty: selectedDiff,
   });
 
@@ -124,12 +135,31 @@ export default function Practice() {
       <div className="p-4 max-w-2xl mx-auto space-y-6">
         <div>
           <h1 className="text-xl font-black text-foreground">Practice MCQs</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Select a chapter to start practising</p>
+          <p className="text-sm text-muted-foreground mt-0.5">Select a subject and chapter to start practising</p>
+        </div>
+
+        {/* Subject tabs */}
+        <div className="flex items-center gap-2 border-b border-border">
+          {SUBJECTS.map((s) => (
+            <button
+              key={s.key}
+              onClick={() => setSubject(s.key)}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-2 text-sm font-semibold border-b-2 -mb-px transition-colors",
+                subject === s.key
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <span>{s.emoji}</span>
+              {s.label}
+            </button>
+          ))}
         </div>
 
         {/* Quick start — All chapters */}
         <button
-          onClick={() => startQuiz(undefined, "All Chapters")}
+          onClick={() => startQuiz(undefined, `All ${SUBJECTS.find(s => s.key === subject)?.label} Chapters`)}
           className="w-full flex items-center gap-4 bg-gradient-to-r from-primary/15 to-primary/5 border border-primary/30 rounded-2xl px-5 py-4 hover:border-primary/50 hover:bg-primary/20 transition-all group"
         >
           <div className="w-10 h-10 bg-primary/20 rounded-xl flex items-center justify-center shrink-0 group-hover:bg-primary/30 transition-colors">
@@ -137,7 +167,7 @@ export default function Practice() {
           </div>
           <div className="text-left flex-1">
             <p className="text-sm font-bold text-foreground">All Chapters</p>
-            <p className="text-xs text-muted-foreground">Mixed questions from every topic</p>
+            <p className="text-xs text-muted-foreground">Mixed questions from every topic in this subject</p>
           </div>
           <ChevronRight className="w-4 h-4 text-primary" />
         </button>
@@ -146,7 +176,10 @@ export default function Practice() {
         <div>
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Or pick a chapter</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {(topics ?? []).map((t, i) => (
+            {topics.length === 0 && (
+              <p className="text-sm text-muted-foreground py-4 col-span-2 text-center">No chapters yet for this subject.</p>
+            )}
+            {topics.map((t: any, i: number) => (
               <button
                 key={t.id}
                 onClick={() => startQuiz(t.id, t.name)}

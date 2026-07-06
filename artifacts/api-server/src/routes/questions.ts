@@ -7,10 +7,11 @@ import type { SQL } from "drizzle-orm";
 const router = Router();
 
 router.get("/questions", async (req, res) => {
-  const { topicId, difficulty, limit } = req.query;
+  const { topicId, difficulty, subject, limit } = req.query;
   const conditions: SQL[] = [];
   if (topicId) conditions.push(eq(questionsTable.topicId, parseInt(topicId as string)));
   if (difficulty) conditions.push(eq(questionsTable.difficulty, difficulty as string));
+  if (subject) conditions.push(eq(topicsTable.subject, subject as string));
 
   const query = db
     .select({

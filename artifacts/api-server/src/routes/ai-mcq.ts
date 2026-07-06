@@ -8,6 +8,19 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 
 
 const router = Router();
 
+const SUBJECT_LABEL: Record<string, string> = {
+  physics: "Physics",
+  chemistry: "Chemistry",
+  biology: "Biology",
+};
+
+async function getTopicSubject(topicId: number | undefined): Promise<string> {
+  if (!topicId) return "Physics";
+  const result = await db.execute(sql`SELECT subject FROM topics WHERE id = ${topicId} LIMIT 1`);
+  const subject = (result.rows[0] as any)?.subject as string | undefined;
+  return SUBJECT_LABEL[subject ?? "physics"] ?? "Physics";
+}
+
 router.post("/ai/generate-mcq", async (req, res) => {
   const { text, imageBase64, imageMediaType, topicId, subtopicId, count = 10 } = req.body;
 
@@ -16,12 +29,13 @@ router.post("/ai/generate-mcq", async (req, res) => {
   }
 
   const clampedCount = Math.min(50, Math.max(1, Number(count)));
+  const subjectLabel = await getTopicSubject(topicId);
 
-  const systemPrompt = `You are an expert NEET/JEE Physics question setter with 20+ years of experience.
+  const systemPrompt = `You are an expert NEET/JEE ${subjectLabel} question setter with 20+ years of experience.
 Generate exactly ${clampedCount} high-quality multiple choice questions based on the input provided.
 
 Rules:
-- Each question must be clear, unambiguous, and at NEET/JEE Class 11-12 Physics level
+- Each question must be clear, unambiguous, and at NEET/JEE Class 11-12 ${subjectLabel} level
 - Each question must have EXACTLY 4 options (A, B, C, D)
 - Each question must have EXACTLY ONE correct answer
 - Include a concise but complete explanation for each answer
@@ -49,12 +63,12 @@ correctOption is 0-indexed (0=A, 1=B, 2=C, 3=D). difficulty must be "easy", "med
       type: "text",
       text: text
         ? `Generate ${clampedCount} MCQs from the image and this context: ${text}`
-        : `Carefully read the image above and generate ${clampedCount} NEET Physics MCQs from the content shown.`,
+        : `Carefully read the image above and generate ${clampedCount} NEET ${subjectLabel} MCQs from the content shown.`,
     });
   } else {
     userContent.push({
       type: "text",
-      text: `Generate ${clampedCount} NEET Physics MCQs from this content:\n\n${text}`,
+      text: `Generate ${clampedCount} NEET ${subjectLabel} MCQs from this content:\n\n${text}`,
     });
   }
 
@@ -93,13 +107,13 @@ router.post("/ai/analyze-content", async (req, res) => {
   const { text, imageBase64, imageMediaType } = req.body;
   if (!text && !imageBase64) return res.status(400).json({ error: "Provide text or image" });
 
-  const systemPrompt = `You are an expert physics teacher reading a question paper or set of notes.
+  const systemPrompt = `You are an expert NEET teacher (Physics, Chemistry & Biology) reading a question paper or set of notes.
 Your job is to identify ALL distinct questions or problems present in the given content.
 
 For each question found, provide:
 - Its number as it appears (Q1, Q2, etc. or Problem 1, 1., etc.) — use sequential integers
 - A brief 1-line preview of what the question is about
-- The topic/concept it tests (e.g. "Kinematics", "Newton's Laws", "Optics")
+- The topic/concept it tests (e.g. "Kinematics", "Chemical Bonding", "Human Reproduction")
 
 Return ONLY this exact JSON, no markdown:
 {"found":[{"number":1,"preview":"A ball is thrown upward with velocity 20 m/s...","topic":"Kinematics"},{"number":2,"preview":"...","topic":"..."}],"total":5}`;
@@ -143,7 +157,7 @@ router.post("/ai/extract-selected", async (req, res) => {
     ? `Extract ONLY these question numbers: ${selectedNumbers.join(", ")}`
     : `Extract questions based on this instruction: ${instruction}`;
 
-  const systemPrompt = `You are an expert NEET/JEE Physics question formatter.
+  const systemPrompt = `You are an expert NEET/JEE question formatter across Physics, Chemistry, and Biology.
 ${selectionDesc}
 
 Convert each selected question into a proper 4-option MCQ at NEET/JEE level. If the original question already has options, use them. If not, create 3 plausible wrong options plus the correct answer.

@@ -15,6 +15,8 @@ export interface Topic {
   description: string;
   questionCount: number;
   icon: string;
+  subject: string;
+  classLevel: string;
 }
 
 export type QuestionDifficulty =
@@ -161,9 +163,14 @@ export interface TopicProgress {
   totalQuestions: number;
 }
 
+export type ListTopicsParams = {
+  subject?: string;
+};
+
 export type ListQuestionsParams = {
   topicId?: number;
   difficulty?: ListQuestionsDifficulty;
+  subject?: string;
   limit?: number;
 };
 

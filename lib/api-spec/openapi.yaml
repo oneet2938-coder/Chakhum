@@ -38,7 +38,13 @@ paths:
     get:
       operationId: listTopics
       tags: [topics]
-      summary: List all physics topics
+      summary: List all topics, optionally filtered by subject
+      parameters:
+        - name: subject
+          in: query
+          required: false
+          schema:
+            type: string
       responses:
         "200":
           description: List of topics
@@ -85,6 +91,10 @@ paths:
           schema:
             type: string
             enum: [easy, medium, hard]
+        - name: subject
+          in: query
+          schema:
+            type: string
         - name: limit
           in: query
           schema:
@@ -277,12 +287,18 @@ components:
           type: integer
         icon:
           type: string
+        subject:
+          type: string
+        classLevel:
+          type: string
       required:
         - id
         - name
         - description
         - questionCount
         - icon
+        - subject
+        - classLevel
 
     Question:
       type: object

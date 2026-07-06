@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useListTopics, useGetTopicProgress } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { ChevronRight } from "lucide-react";
@@ -32,10 +33,25 @@ const ICON_EMOJI: Record<string, string> = {
   atom: "⚛️",
   target: "🎯",
   code: "💻",
+  flask: "🧪",
+  leaf: "🍃",
+  dna: "🧬",
+  microscope: "🔬",
+  bug: "🐛",
+  heart: "❤️",
+  brain: "🧠",
+  seed: "🌱",
+  tree: "🌳",
+  molecule: "🧫",
 };
 
-const CLASS11_IDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
-const CLASS12_IDS = [16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29];
+type SubjectKey = "physics" | "chemistry" | "biology";
+
+const SUBJECTS: { key: SubjectKey; label: string; emoji: string }[] = [
+  { key: "physics", label: "Physics", emoji: "⚛️" },
+  { key: "chemistry", label: "Chemistry", emoji: "🧪" },
+  { key: "biology", label: "Biology", emoji: "🧬" },
+];
 
 function TopicCard({
   topic,
@@ -126,6 +142,7 @@ function SectionHeader({
 export default function Topics() {
   const { data: topics, isLoading } = useListTopics();
   const { data: progress } = useGetTopicProgress();
+  const [subject, setSubject] = useState<SubjectKey>("physics");
 
   const progressMap = Object.fromEntries(
     (progress ?? []).map((p) => [p.topicId, p])
@@ -145,53 +162,83 @@ export default function Topics() {
   }
 
   const allTopics = topics ?? [];
-  const class11 = allTopics.filter((t) => CLASS11_IDS.includes(t.id));
-  const class12 = allTopics.filter((t) => CLASS12_IDS.includes(t.id));
+  const subjectTopics = allTopics.filter((t: any) => (t.subject ?? "physics") === subject);
+  const class11 = subjectTopics.filter((t: any) => (t.classLevel ?? "11") === "11");
+  const class12 = subjectTopics.filter((t: any) => (t.classLevel ?? "11") === "12");
 
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-xl font-bold text-foreground">Physics Topics</h1>
+        <h1 className="text-xl font-bold text-foreground">NEET Topics</h1>
         <p className="text-sm text-muted-foreground mt-0.5">
-          {allTopics.length} chapters · {allTopics.reduce((s, t) => s + t.questionCount, 0)} questions
+          {subjectTopics.length} chapters · {subjectTopics.reduce((s: number, t: any) => s + t.questionCount, 0)} questions
         </p>
       </div>
 
-      {/* Class 11 */}
-      <div>
-        <SectionHeader label="Mechanics, Thermal & Waves" badge="11" count={class11.length} />
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
-          {class11.map((topic) => {
-            const p = progressMap[topic.id];
-            return (
-              <TopicCard
-                key={topic.id}
-                topic={topic}
-                accuracy={p?.questionsAttempted ? p.accuracy : null}
-                attempted={p?.questionsAttempted ?? 0}
-              />
-            );
-          })}
-        </div>
+      {/* Subject tabs */}
+      <div className="flex items-center gap-2 border-b border-border">
+        {SUBJECTS.map((s) => (
+          <button
+            key={s.key}
+            onClick={() => setSubject(s.key)}
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-2 text-sm font-semibold border-b-2 -mb-px transition-colors",
+              subject === s.key
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <span>{s.emoji}</span>
+            {s.label}
+          </button>
+        ))}
       </div>
 
-      {/* Class 12 */}
-      <div>
-        <SectionHeader label="Electrostatics, Optics & Modern Physics" badge="12" count={class12.length} />
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
-          {class12.map((topic) => {
-            const p = progressMap[topic.id];
-            return (
-              <TopicCard
-                key={topic.id}
-                topic={topic}
-                accuracy={p?.questionsAttempted ? p.accuracy : null}
-                attempted={p?.questionsAttempted ?? 0}
-              />
-            );
-          })}
-        </div>
-      </div>
+      {subjectTopics.length === 0 ? (
+        <p className="text-sm text-muted-foreground py-8 text-center">No chapters added for this subject yet.</p>
+      ) : (
+        <>
+          {/* Class 11 */}
+          {class11.length > 0 && (
+            <div>
+              <SectionHeader label="Class 11 Chapters" badge="11" count={class11.length} />
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+                {class11.map((topic: any) => {
+                  const p = progressMap[topic.id];
+                  return (
+                    <TopicCard
+                      key={topic.id}
+                      topic={topic}
+                      accuracy={p?.questionsAttempted ? p.accuracy : null}
+                      attempted={p?.questionsAttempted ?? 0}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Class 12 */}
+          {class12.length > 0 && (
+            <div>
+              <SectionHeader label="Class 12 Chapters" badge="12" count={class12.length} />
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+                {class12.map((topic: any) => {
+                  const p = progressMap[topic.id];
+                  return (
+                    <TopicCard
+                      key={topic.id}
+                      topic={topic}
+                      accuracy={p?.questionsAttempted ? p.accuracy : null}
+                      attempted={p?.questionsAttempted ?? 0}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
