@@ -108,6 +108,94 @@ interface GeneratedMCQ {
   difficulty: string;
 }
 
+interface ManualQuestion {
+  text: string;
+  options: string[];
+  correctOption: number;
+  explanation: string;
+  difficulty: string;
+  imageB64?: string | null;
+  imageMime?: string;
+  imageName?: string | null;
+}
+
+function parseGeminiPaste(raw: string): ManualQuestion[] {
+  const lines = raw.replace(/\r/g, "").split("\n").map((l) => l.replace(/\*\*/g, "").trim());
+  const questions: ManualQuestion[] = [];
+  let current: { text: string; options: string[]; correctOption?: number; explanation?: string } | null = null;
+  let mode: "question" | "explanation" | null = null;
+
+  const questionStart = /^(?:q(?:uestion)?\.?\s*\d+\s*[:.)]?|(\d+)\s*[.)])\s*(.*)$/i;
+  const optionLine = /^[(\[]?([a-dA-D])[)\].:]\s*(.+)$/;
+  const answerLine = /^(?:correct\s*answer|correct\s*option|answer|ans)\s*[:\-]?\s*\(?([a-dA-D])\)?\.?\s*(.*)$/i;
+  const explanationLine = /^(?:explanation|reason|solution)\s*[:\-]?\s*(.*)$/i;
+
+  function pushCurrent() {
+    if (current && current.text.trim() && current.options.filter(Boolean).length >= 2) {
+      const opts = [...current.options];
+      while (opts.length < 4) opts.push("");
+      questions.push({
+        text: current.text.trim(),
+        options: opts.slice(0, 4),
+        correctOption: current.correctOption ?? 0,
+        explanation: current.explanation?.trim() ?? "",
+        difficulty: "medium",
+      });
+    }
+    current = null;
+    mode = null;
+  }
+
+  for (const line of lines) {
+    if (!line) continue;
+    const qMatch = line.match(questionStart);
+    const optMatch = line.match(optionLine);
+    const ansMatch = line.match(answerLine);
+    const expMatch = line.match(explanationLine);
+
+    if (qMatch && !optMatch) {
+      pushCurrent();
+      current = { text: qMatch[2] || "", options: [] };
+      mode = "question";
+      continue;
+    }
+
+    if (!current) {
+      current = { text: line, options: [] };
+      mode = "question";
+      continue;
+    }
+
+    if (optMatch) {
+      const idx = optMatch[1].toUpperCase().charCodeAt(0) - 65;
+      current.options[idx] = optMatch[2].trim();
+      mode = null;
+      continue;
+    }
+
+    if (ansMatch) {
+      const idx = ansMatch[1].toUpperCase().charCodeAt(0) - 65;
+      current.correctOption = idx;
+      mode = null;
+      continue;
+    }
+
+    if (expMatch) {
+      current.explanation = (current.explanation ? current.explanation + " " : "") + expMatch[1];
+      mode = "explanation";
+      continue;
+    }
+
+    if (mode === "explanation") {
+      current.explanation = (current.explanation ? current.explanation + " " : "") + line;
+    } else if (mode === "question") {
+      current.text = (current.text ? current.text + " " : "") + line;
+    }
+  }
+  pushCurrent();
+  return questions;
+}
+
 interface PracticeSetRow {
   id: number;
   title: string;
@@ -175,7 +263,7 @@ export default function AdminPanel() {
   const [deleteLoading, setDeleteLoading] = useState<Record<number, boolean>>({});
 
   // AI Tools tab
-  const [aiMode, setAiMode] = useState<"extractor" | "generator">("extractor");
+  const [aiMode, setAiMode] = useState<"extractor" | "generator" | "manual">("extractor");
   const [aiText, setAiText] = useState("");
   const [aiImageB64, setAiImageB64] = useState<string | null>(null);
   const [aiImageMime, setAiImageMime] = useState<string>("image/jpeg");
@@ -210,6 +298,14 @@ export default function AdminPanel() {
   const [agentReasoning, setAgentReasoning] = useState("");
   const [agentError, setAgentError] = useState<string | null>(null);
   const [agentCopied, setAgentCopied] = useState(false);
+
+  // Manual Add tab
+  const [manualQuestions, setManualQuestions] = useState<ManualQuestion[]>([]);
+  const [manualPasteText, setManualPasteText] = useState("");
+  const [manualSaving, setManualSaving] = useState(false);
+  const [manualSaved, setManualSaved] = useState(false);
+  const [manualError, setManualError] = useState<string | null>(null);
+  const manualImageInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
 
   // API Key settings
   const [keyStatus, setKeyStatus] = useState<{ hasEnvKey: boolean; hasDbKey: boolean; maskedKey: string | null } | null>(null);
@@ -659,6 +755,84 @@ export default function AdminPanel() {
     navigator.clipboard.writeText(ids);
     setAgentCopied(true);
     setTimeout(() => setAgentCopied(false), 2000);
+  }
+
+  function addBlankManualQuestion() {
+    setManualQuestions((prev) => [
+      ...prev,
+      { text: "", options: ["", "", "", ""], correctOption: 0, explanation: "", difficulty: "medium", imageB64: null, imageName: null },
+    ]);
+  }
+
+  function parseManualPaste() {
+    setManualError(null);
+    const parsed = parseGeminiPaste(manualPasteText);
+    if (!parsed.length) {
+      setManualError("Couldn't detect any questions in the pasted text. Try the format: question, then A) B) C) D) options, then Answer: B, then Explanation: …");
+      return;
+    }
+    setManualQuestions((prev) => [...prev, ...parsed]);
+    setManualPasteText("");
+  }
+
+  function updateManualQuestion(idx: number, patch: Partial<ManualQuestion>) {
+    setManualQuestions((prev) => prev.map((q, i) => (i === idx ? { ...q, ...patch } : q)));
+  }
+
+  function updateManualOption(idx: number, optIdx: number, value: string) {
+    setManualQuestions((prev) =>
+      prev.map((q, i) => (i === idx ? { ...q, options: q.options.map((o, oi) => (oi === optIdx ? value : o)) } : q))
+    );
+  }
+
+  function removeManualQuestion(idx: number) {
+    setManualQuestions((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  function handleManualImageUpload(idx: number, file: File) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const result = e.target?.result as string;
+      const b64 = result.split(",")[1];
+      updateManualQuestion(idx, { imageB64: b64, imageMime: file.type, imageName: file.name });
+    };
+    reader.readAsDataURL(file);
+  }
+
+  async function saveManualQuestions() {
+    if (!manualQuestions.length || !aiTopicId) { setManualError("Select a topic and add at least one question."); return; }
+    const invalid = manualQuestions.some((q) => !q.text.trim() || q.options.some((o) => !o.trim()) || !q.explanation.trim());
+    if (invalid) { setManualError("Every question needs text, all 4 options filled in, and an explanation."); return; }
+
+    setManualSaving(true);
+    setManualError(null);
+    try {
+      const res = await fetch("/api/ai/save-questions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          questions: manualQuestions.map((q) => ({
+            text: q.text,
+            options: q.options,
+            correctOption: q.correctOption,
+            explanation: q.explanation,
+            difficulty: q.difficulty,
+            imageB64: q.imageB64 ?? undefined,
+          })),
+          topicId: aiTopicId,
+          subtopicId: aiSubtopicId || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Save failed");
+      setManualSaved(true);
+      setManualQuestions([]);
+      setTimeout(() => setManualSaved(false), 3000);
+    } catch (e: any) {
+      setManualError(e.message ?? "Save failed");
+    } finally {
+      setManualSaving(false);
+    }
   }
 
   async function fetchKeyStatus() {
@@ -1982,7 +2156,7 @@ export default function AdminPanel() {
 
             {/* Mode toggle */}
             <div className="flex gap-1 bg-muted/40 border border-border rounded-lg p-1 w-fit">
-              {([["generator", "⚡ Quick Generate"], ["extractor", "🔍 Smart Extractor"]] as const).map(([mode, label]) => (
+              {([["generator", "⚡ Quick Generate"], ["extractor", "🔍 Smart Extractor"], ["manual", "✍️ Manual Add"]] as const).map(([mode, label]) => (
                 <button
                   key={mode}
                   onClick={() => setAiMode(mode)}
@@ -2434,6 +2608,181 @@ export default function AdminPanel() {
               </div>
             )}
             </div>)}
+
+            {/* ── MANUAL ADD ── */}
+            {aiMode === "manual" && (
+              <div className="space-y-4">
+                <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+                  <p className="text-xs text-muted-foreground">
+                    Type your own question, or paste a question copied from Gemini (or any AI) — it'll be auto-parsed into fields you can review and edit before saving.
+                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Chapter / Topic *</label>
+                      <select value={aiTopicId} onChange={(e) => setAiTopicId(e.target.value ? Number(e.target.value) : "")}
+                        className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/60">
+                        <option value="">Select topic…</option>
+                        {aiTopics.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Subtopic (optional)</label>
+                      <select value={aiSubtopicId} onChange={(e) => setAiSubtopicId(e.target.value ? Number(e.target.value) : "")}
+                        disabled={!aiTopicId || aiSubtopics.length === 0}
+                        className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/60 disabled:opacity-50">
+                        <option value="">Any subtopic</option>
+                        {aiSubtopics.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                      <Bot className="w-3 h-3" /> Paste from Gemini / AI (optional)
+                    </label>
+                    <textarea
+                      placeholder={"Paste a question exactly as copied from Gemini, e.g.:\n\nQuestion: A ball is thrown upward with v = 20 m/s. Find max height.\nA) 10 m\nB) 20 m\nC) 15 m\nD) 25 m\nAnswer: B\nExplanation: Using v² = u² - 2gh…"}
+                      value={manualPasteText}
+                      onChange={(e) => setManualPasteText(e.target.value)}
+                      rows={6}
+                      className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 resize-none font-mono"
+                    />
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        onClick={parseManualPaste}
+                        disabled={!manualPasteText.trim()}
+                        className="flex items-center gap-1.5 px-4 py-2 bg-primary/10 border border-primary/25 text-primary text-xs font-bold rounded-lg hover:bg-primary/20 transition-all disabled:opacity-40"
+                      >
+                        <Sparkles className="w-3.5 h-3.5" /> Parse & Add
+                      </button>
+                      <button
+                        onClick={addBlankManualQuestion}
+                        className="flex items-center gap-1.5 px-4 py-2 bg-muted/40 border border-dashed border-border text-muted-foreground text-xs font-bold rounded-lg hover:border-primary/40 hover:text-foreground transition-all"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Add Blank Question
+                      </button>
+                    </div>
+                  </div>
+
+                  {manualError && (
+                    <div className="flex items-center gap-2 text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-lg px-3 py-2">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" /> {manualError}
+                    </div>
+                  )}
+                  {manualSaved && (
+                    <div className="flex items-center gap-2 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2">
+                      <CheckCircle2 className="w-3.5 h-3.5 shrink-0" /> Questions saved to the question bank!
+                    </div>
+                  )}
+                </div>
+
+                {manualQuestions.length > 0 && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                        <Eye className="w-4 h-4 text-primary" /> Questions to Save ({manualQuestions.length})
+                      </h3>
+                      <button onClick={saveManualQuestions} disabled={manualSaving || !aiTopicId}
+                        className="flex items-center gap-2 px-4 py-1.5 bg-emerald-500 text-white text-xs font-bold rounded-lg hover:bg-emerald-400 transition-colors disabled:opacity-50">
+                        <Save className="w-3.5 h-3.5" /> {manualSaving ? "Saving…" : "Save All to Bank"}
+                      </button>
+                    </div>
+
+                    <div className="space-y-3">
+                      {manualQuestions.map((q, idx) => (
+                        <div key={idx} className="bg-card border border-card-border rounded-xl p-4 space-y-3">
+                          <div className="flex items-start gap-2">
+                            <span className="text-[11px] font-bold text-muted-foreground shrink-0 mt-2">Q{idx + 1}</span>
+                            <textarea
+                              value={q.text}
+                              onChange={(e) => updateManualQuestion(idx, { text: e.target.value })}
+                              placeholder="Question text…"
+                              rows={2}
+                              className="flex-1 bg-muted/30 border border-border rounded-lg px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 resize-none"
+                            />
+                            <select
+                              value={q.difficulty}
+                              onChange={(e) => updateManualQuestion(idx, { difficulty: e.target.value })}
+                              className={cn("text-[10px] px-1.5 py-1 rounded border font-semibold uppercase tracking-wider shrink-0 bg-muted/30",
+                                q.difficulty === "easy" ? "text-emerald-400 border-emerald-500/25" :
+                                q.difficulty === "hard" ? "text-rose-400 border-rose-500/25" :
+                                "text-amber-400 border-amber-500/25")}
+                            >
+                              <option value="easy">Easy</option>
+                              <option value="medium">Medium</option>
+                              <option value="hard">Hard</option>
+                            </select>
+                            <button onClick={() => removeManualQuestion(idx)} className="text-muted-foreground hover:text-rose-400 transition-colors shrink-0 mt-2">
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            {q.options.map((opt, i) => (
+                              <div key={i} className={cn("flex items-center gap-2 px-2 py-1 rounded border",
+                                i === q.correctOption ? "bg-emerald-500/10 border-emerald-500/25" : "bg-muted/20 border-border")}>
+                                <button
+                                  onClick={() => updateManualQuestion(idx, { correctOption: i })}
+                                  className={cn("font-mono font-bold shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs transition-all",
+                                    i === q.correctOption ? "bg-emerald-500 text-white" : "bg-muted text-muted-foreground hover:bg-muted/70")}
+                                  title="Mark as correct answer"
+                                >
+                                  {String.fromCharCode(65 + i)}
+                                </button>
+                                <input
+                                  value={opt}
+                                  onChange={(e) => updateManualOption(idx, i, e.target.value)}
+                                  placeholder={`Option ${String.fromCharCode(65 + i)}`}
+                                  className="flex-1 bg-transparent text-xs text-foreground placeholder:text-muted-foreground/40 focus:outline-none py-1"
+                                />
+                                {i === q.correctOption && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />}
+                              </div>
+                            ))}
+                          </div>
+
+                          <textarea
+                            value={q.explanation}
+                            onChange={(e) => updateManualQuestion(idx, { explanation: e.target.value })}
+                            placeholder="Explanation…"
+                            rows={2}
+                            className="w-full bg-muted/30 rounded-lg px-3 py-2 text-[11px] text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border focus:border-primary/60 resize-none"
+                          />
+
+                          {/* Optional image */}
+                          <input
+                            ref={(el) => { manualImageInputRefs.current[idx] = el; }}
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleManualImageUpload(idx, f); if (e.target) e.target.value = ""; }}
+                          />
+                          {q.imageName ? (
+                            <div className="flex items-center gap-2 bg-primary/10 border border-primary/25 rounded-lg px-3 py-1.5">
+                              <ImageUp className="w-3.5 h-3.5 text-primary shrink-0" />
+                              <span className="text-[11px] text-foreground font-medium truncate flex-1">{q.imageName}</span>
+                              <button onClick={() => updateManualQuestion(idx, { imageB64: null, imageName: null })} className="text-[11px] text-muted-foreground hover:text-rose-400 transition-colors">Remove</button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => manualImageInputRefs.current[idx]?.click()}
+                              className="flex items-center gap-2 px-3 py-1.5 bg-muted/30 border border-dashed border-border rounded-lg text-[11px] text-muted-foreground hover:border-primary/40 hover:text-foreground transition-all"
+                            >
+                              <ImageUp className="w-3.5 h-3.5" /> Attach Image (optional)
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    <button onClick={saveManualQuestions} disabled={manualSaving || !aiTopicId}
+                      className="w-full flex items-center justify-center gap-2 py-3 bg-emerald-500 text-white text-sm font-bold rounded-xl hover:bg-emerald-400 transition-colors disabled:opacity-50">
+                      <Save className="w-4 h-4" /> {manualSaving ? "Saving…" : `Save ${manualQuestions.length} Question${manualQuestions.length > 1 ? "s" : ""} to Bank`}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* ── AI Question Selector Agent ── */}
             <div className="border-t border-border pt-6 space-y-4">
