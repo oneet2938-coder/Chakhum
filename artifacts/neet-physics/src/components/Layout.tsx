@@ -62,7 +62,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
         <Link href="/" className="flex items-center gap-2">
           <img src="/logo.png" alt="EMC" className="w-6 h-6 rounded object-contain" />
-          <span className="text-sm font-bold text-foreground tracking-wide">EMC²</span>
+          <span className="text-sm font-bold text-foreground tracking-wide">TSM</span>
           <span className="text-[10px] text-muted-foreground hidden sm:block">Physics NEET Prep</span>
         </Link>
 
@@ -132,7 +132,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <div className="flex items-center gap-2.5 px-5 py-4 border-b border-sidebar-border">
           <img src="/logo.png" alt="EMC Logo" className="w-7 h-7 rounded-md object-contain" />
           <div className="flex-1 min-w-0">
-            <div className="text-sm font-bold text-foreground tracking-wide">EMC²</div>
+            <div className="text-sm font-bold text-foreground tracking-wide">TSM</div>
             <div className="text-[10px] text-muted-foreground leading-none">Physics NEET Prep</div>
           </div>
           <button

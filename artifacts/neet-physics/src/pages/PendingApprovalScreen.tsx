@@ -36,7 +36,7 @@ export default function PendingApprovalScreen({ rejected = false }: { rejected?:
       <div className="flex items-center gap-3 mb-8">
         <img src="/logo.png" alt="EMC Logo" className="w-12 h-12 rounded-xl object-contain" />
         <div>
-          <h1 className="text-xl font-bold text-foreground tracking-wide">EMC²</h1>
+          <h1 className="text-xl font-bold text-foreground tracking-wide">TSM</h1>
           <p className="text-xs text-muted-foreground">Mastery Test Series</p>
         </div>
       </div>

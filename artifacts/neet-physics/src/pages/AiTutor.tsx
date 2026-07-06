@@ -206,7 +206,7 @@ export default function AiTutor() {
             <Sparkles className="w-4 h-4 text-violet-400" />
           </div>
           <div>
-            <h1 className="text-sm font-bold text-foreground">EMC² AI Tutor</h1>
+            <h1 className="text-sm font-bold text-foreground">TSM AI Tutor</h1>
             <p className="text-[11px] text-muted-foreground">Physics expert · Ask anything</p>
           </div>
           <div className="ml-auto flex items-center gap-2">
@@ -238,7 +238,7 @@ export default function AiTutor() {
                 Ask any Physics question — concepts, derivations, numericals, shortcuts, or exam tips. I'm tuned for NEET.
               </p>
               <div className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full">
-                <span>✓</span> Worth ₹1,00,000 — Free for all EMC² students
+                <span>✓</span> Worth ₹1,00,000 — Free for all TSM students
               </div>
             </div>
 
@@ -302,7 +302,7 @@ export default function AiTutor() {
             </button>
           </div>
           <p className="text-[10px] text-muted-foreground text-center mt-1.5">
-            EMC² AI · Powered by Claude · Tuned for NEET Physics
+            TSM AI · Powered by OpenAI · Tuned for NEET Physics
           </p>
         </div>
       </div>

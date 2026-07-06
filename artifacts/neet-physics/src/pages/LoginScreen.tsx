@@ -4,7 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
 
 const TEACHER_CODE = "9862";
-const TEACHER_NAME = "Bijay Elangbm";
+const TEACHER_NAME = "Thangjam Shrisai";
 
 type Step = "role" | "course-select" | "test-only-info" | "student-form" | "teacher-code";
 type CourseChoice = "foundation" | "test_only";
@@ -65,7 +65,7 @@ export default function LoginScreen() {
       <div className="flex items-center gap-3 mb-8">
         <img src="/logo.png" alt="EMC Logo" className="w-12 h-12 rounded-xl object-contain" />
         <div>
-          <h1 className="text-xl font-bold text-foreground tracking-wide">EMC²</h1>
+          <h1 className="text-xl font-bold text-foreground tracking-wide">TSM</h1>
           <p className="text-xs text-muted-foreground">Physics NEET Prep</p>
         </div>
       </div>
@@ -327,7 +327,7 @@ export default function LoginScreen() {
         )}
       </div>
 
-      <p className="text-[11px] text-muted-foreground mt-6">EMC² Physics · NEET 2027</p>
+      <p className="text-[11px] text-muted-foreground mt-6">TSM Physics · NEET 2027</p>
     </div>
   );
 }

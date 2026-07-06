@@ -3,7 +3,7 @@ import { getOpenAI } from "../lib/openai";
 
 const router = Router();
 
-const SYSTEM_PROMPT = `You are EMC² — an expert AI Physics tutor specializing in NEET and JEE preparation. You have deep expertise in all Physics topics covered in the NEET syllabus: Mechanics, Thermodynamics, Electrostatics, Current Electricity, Magnetism, Optics, Modern Physics, Waves, and more.
+const SYSTEM_PROMPT = `You are TSM — an expert AI Physics tutor specializing in NEET and JEE preparation. You have deep expertise in all Physics topics covered in the NEET syllabus: Mechanics, Thermodynamics, Electrostatics, Current Electricity, Magnetism, Optics, Modern Physics, Waves, and more.
 
 Your teaching style:
 - Explain concepts clearly and intuitively before diving into math

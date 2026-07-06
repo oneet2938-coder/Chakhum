@@ -24,12 +24,12 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
 - `pnpm --filter @workspace/api-server run dev` — run API server locally
 
-## App: EMC² Physics NEET Prep
+## App: TSM Physics NEET Prep
 
 **Product**: Mastery Test Series — ₹5,000/year paid access platform.
 
 ### Auth & Access Control
-- **Teacher login**: code `9862` → "Bijay Elangbm" → full Admin Panel
+- **Teacher login**: code `9862` → "Thangjam Shrisai" → full Admin Panel
 - **Student login**: name + phone → account created with `status = 'pending'`
 - New students see "Waiting for Approval" screen until teacher approves
 - Teacher approves/rejects from Admin Panel → Approvals tab
