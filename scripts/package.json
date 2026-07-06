@@ -8,6 +8,7 @@
     "seed-questions": "tsx ./src/seed-neet-questions.ts",
     "seed-mastery": "tsx ./src/seed-mastery.ts",
     "seed-pcb-topics": "tsx ./src/seed-pcb-topics.ts",
+    "sync-pcb-syllabus": "tsx ./src/sync-pcb-syllabus.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
