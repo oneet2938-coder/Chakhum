@@ -98,7 +98,18 @@ interface PendingStudent {
   createdAt: string;
 }
 
-type Tab = "approvals" | "daily" | "students" | "overview" | "leaderboard" | "topstudents" | "dailypractice" | "aitools" | "tests" | "apisettings";
+type Tab = "approvals" | "daily" | "students" | "overview" | "leaderboard" | "topstudents" | "dailypractice" | "aitools" | "tests" | "testseries" | "apisettings";
+
+interface TestSeriesItem {
+  id: number; title: string; description: string;
+  price_rupees: number; is_published: boolean;
+  sub_test_count: number; created_at: string;
+}
+interface SeriesTestItem {
+  id: number; series_id: number; title: string; description: string;
+  topic_ids: number[]; duration_minutes: number; total_marks: number;
+  order_index: number; scheduled_at: string | null;
+}
 
 interface GeneratedMCQ {
   text: string;
@@ -387,6 +398,128 @@ export default function AdminPanel() {
   const [dpCreating, setDpCreating] = useState(false);
   const [dpError, setDpError] = useState<string | null>(null);
   const [dpDeleteConfirm, setDpDeleteConfirm] = useState<number | null>(null);
+
+  // Test Series tab
+  const [seriesList, setSeriesList] = useState<TestSeriesItem[]>([]);
+  const [seriesLoading, setSeriesLoading] = useState(false);
+  const [selectedSeriesId, setSelectedSeriesId] = useState<number | null>(null);
+  const [seriesTests, setSeriesTests] = useState<SeriesTestItem[]>([]);
+  const [seriesTestsLoading, setSeriesTestsLoading] = useState(false);
+  const [seriesTopics, setSeriesTopics] = useState<TopicOption[]>([]);
+  // Create series form
+  const [newSeriesTitle, setNewSeriesTitle] = useState("");
+  const [newSeriesDesc, setNewSeriesDesc] = useState("");
+  const [newSeriesPrice, setNewSeriesPrice] = useState(0);
+  const [seriesCreating, setSeriesCreating] = useState(false);
+  const [seriesError, setSeriesError] = useState<string | null>(null);
+  const [seriesDeleteConfirm, setSeriesDeleteConfirm] = useState<number | null>(null);
+  // Add sub-test form
+  const [stTitle, setStTitle] = useState("");
+  const [stDesc, setStDesc] = useState("");
+  const [stTopicIds, setStTopicIds] = useState<number[]>([]);
+  const [stDuration, setStDuration] = useState(60);
+  const [stMarks, setStMarks] = useState(100);
+  const [stScheduled, setStScheduled] = useState("");
+  const [stCreating, setStCreating] = useState(false);
+  const [stError, setStError] = useState<string | null>(null);
+  const [stDeleteConfirm, setStDeleteConfirm] = useState<number | null>(null);
+  // Edit series inline
+  const [editSeriesId, setEditSeriesId] = useState<number | null>(null);
+  const [editSeriesTitle, setEditSeriesTitle] = useState("");
+  const [editSeriesDesc, setEditSeriesDesc] = useState("");
+  const [editSeriesPrice, setEditSeriesPrice] = useState(0);
+  const [editSeriesSaving, setEditSeriesSaving] = useState(false);
+
+  const fetchSeriesList = useCallback(async () => {
+    setSeriesLoading(true);
+    const data = await fetch("/api/admin/test-series").then((r) => r.json());
+    setSeriesList(Array.isArray(data) ? data : []);
+    setSeriesLoading(false);
+  }, []);
+
+  const fetchSeriesTests = useCallback(async (sid: number) => {
+    setSeriesTestsLoading(true);
+    const data = await fetch(`/api/admin/test-series/${sid}/tests`).then((r) => r.json());
+    setSeriesTests(Array.isArray(data) ? data : []);
+    setSeriesTestsLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (tab !== "testseries") return;
+    fetchSeriesList();
+    fetch("/api/topics").then((r) => r.json()).then(setSeriesTopics);
+  }, [tab, fetchSeriesList]);
+
+  useEffect(() => {
+    if (selectedSeriesId !== null) fetchSeriesTests(selectedSeriesId);
+    else setSeriesTests([]);
+  }, [selectedSeriesId, fetchSeriesTests]);
+
+  async function createSeries() {
+    if (!newSeriesTitle.trim()) { setSeriesError("Title required"); return; }
+    setSeriesCreating(true); setSeriesError(null);
+    await fetch("/api/admin/test-series", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: newSeriesTitle, description: newSeriesDesc, priceRupees: newSeriesPrice }),
+    });
+    setNewSeriesTitle(""); setNewSeriesDesc(""); setNewSeriesPrice(0);
+    await fetchSeriesList();
+    setSeriesCreating(false);
+  }
+
+  async function togglePublish(s: TestSeriesItem) {
+    await fetch(`/api/admin/test-series/${s.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isPublished: !s.is_published }),
+    });
+    await fetchSeriesList();
+  }
+
+  async function deleteSeries(id: number) {
+    await fetch(`/api/admin/test-series/${id}`, { method: "DELETE" });
+    if (selectedSeriesId === id) setSelectedSeriesId(null);
+    setSeriesDeleteConfirm(null);
+    await fetchSeriesList();
+  }
+
+  async function saveEditSeries() {
+    if (!editSeriesId) return;
+    setEditSeriesSaving(true);
+    await fetch(`/api/admin/test-series/${editSeriesId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: editSeriesTitle, description: editSeriesDesc, priceRupees: editSeriesPrice }),
+    });
+    setEditSeriesId(null);
+    setEditSeriesSaving(false);
+    await fetchSeriesList();
+  }
+
+  async function addSeriesTest() {
+    if (!selectedSeriesId || !stTitle.trim()) { setStError("Title required"); return; }
+    setStCreating(true); setStError(null);
+    await fetch(`/api/admin/test-series/${selectedSeriesId}/tests`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: stTitle, description: stDesc, topicIds: stTopicIds,
+        durationMinutes: stDuration, totalMarks: stMarks,
+        scheduledAt: stScheduled || null,
+      }),
+    });
+    setStTitle(""); setStDesc(""); setStTopicIds([]); setStDuration(60); setStMarks(100); setStScheduled("");
+    await fetchSeriesTests(selectedSeriesId);
+    setStCreating(false);
+  }
+
+  async function deleteSeriesTest(tid: number) {
+    if (!selectedSeriesId) return;
+    await fetch(`/api/admin/test-series/${selectedSeriesId}/tests/${tid}`, { method: "DELETE" });
+    setStDeleteConfirm(null);
+    await fetchSeriesTests(selectedSeriesId);
+  }
 
   const fetchApprovals = useCallback(async () => {
     setApprovalsLoading(true);
@@ -994,7 +1127,7 @@ export default function AdminPanel() {
 
         {/* ── Tabs ── */}
         <div className="flex gap-1 bg-muted/40 border border-border rounded-lg p-1 w-fit flex-wrap">
-          {([ ["approvals", "✅ Approvals"], ["daily", "Daily Report"], ["students", "All Students"], ["overview", "Overview"], ["leaderboard", "💎 Leaderboard"], ["topstudents", "🏅 Top Students"], ["tests", "📝 Tests"], ["dailypractice", "📅 Daily Practice"], ["aitools", "🤖 AI Tools"], ["apisettings", "🔑 API Key"] ] as [Tab, string][]).map(([id, label]) => (
+          {([ ["approvals", "✅ Approvals"], ["daily", "Daily Report"], ["students", "All Students"], ["overview", "Overview"], ["leaderboard", "💎 Leaderboard"], ["topstudents", "🏅 Top Students"], ["tests", "📝 Tests"], ["testseries", "📋 Test Series"], ["dailypractice", "📅 Daily Practice"], ["aitools", "🤖 AI Tools"], ["apisettings", "🔑 API Key"] ] as [Tab, string][]).map(([id, label]) => (
             <button
               key={id}
               onClick={() => { setTab(id); if (id === "apisettings") fetchKeyStatus(); }}
@@ -3250,6 +3383,271 @@ export default function AdminPanel() {
                 <li className="flex gap-2"><span className="text-primary font-bold">2.</span> Otherwise, the <code className="font-mono bg-muted px-1 rounded text-[10px]">OPENAI_API_KEY</code> environment variable is used.</li>
                 <li className="flex gap-2"><span className="text-primary font-bold">3.</span> If neither is set, AI features (MCQ Generator, AI Tutor) will return errors.</li>
               </ul>
+            </div>
+          </div>
+        )}
+
+        {/* ── Test Series Tab ── */}
+        {tab === "testseries" && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-base font-bold text-foreground flex items-center gap-2">
+                <ClipboardList className="w-4 h-4 text-primary" /> Test Series Manager
+              </h2>
+              <p className="text-xs text-muted-foreground mt-0.5">Create paid or free test series with multiple sub-tests, each with its own syllabus and schedule.</p>
+            </div>
+
+            {/* ── Create New Series ── */}
+            <div className="bg-card border border-card-border rounded-xl p-5 space-y-4">
+              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <Plus className="w-4 h-4 text-primary" /> Create New Series
+              </h3>
+              {seriesError && (
+                <div className="flex items-center gap-2 text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-lg px-3 py-2">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" /> {seriesError}
+                </div>
+              )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Series Title *</label>
+                  <input
+                    type="text" placeholder="e.g. NEET 2027 Full Mock Series"
+                    value={newSeriesTitle} onChange={(e) => setNewSeriesTitle(e.target.value)}
+                    className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/60"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Price (₹)</label>
+                  <input
+                    type="number" min={0} placeholder="0 = Free"
+                    value={newSeriesPrice} onChange={(e) => setNewSeriesPrice(Math.max(0, Number(e.target.value)))}
+                    className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/60"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Description</label>
+                <textarea
+                  placeholder="What students will get in this series…"
+                  value={newSeriesDesc} onChange={(e) => setNewSeriesDesc(e.target.value)}
+                  rows={2}
+                  className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 resize-none"
+                />
+              </div>
+              <button
+                onClick={createSeries} disabled={seriesCreating || !newSeriesTitle.trim()}
+                className="flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground text-sm font-bold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40"
+              >
+                <Plus className="w-4 h-4" />
+                {seriesCreating ? "Creating…" : "Create Series"}
+              </button>
+            </div>
+
+            {/* ── Series List ── */}
+            <div className="grid grid-cols-1 gap-4">
+              {seriesLoading ? (
+                <div className="text-center py-10 text-muted-foreground text-sm">Loading…</div>
+              ) : seriesList.length === 0 ? (
+                <div className="text-center py-10 text-muted-foreground text-sm">No series yet. Create one above.</div>
+              ) : seriesList.map((s) => (
+                <div key={s.id} className={cn("bg-card border rounded-xl overflow-hidden transition-all", selectedSeriesId === s.id ? "border-primary/50" : "border-card-border")}>
+                  {/* Series Header */}
+                  {editSeriesId === s.id ? (
+                    <div className="p-4 space-y-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <input
+                          type="text" value={editSeriesTitle} onChange={(e) => setEditSeriesTitle(e.target.value)}
+                          className="bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/60"
+                        />
+                        <input
+                          type="number" min={0} value={editSeriesPrice} onChange={(e) => setEditSeriesPrice(Math.max(0, Number(e.target.value)))}
+                          className="bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/60"
+                        />
+                      </div>
+                      <textarea
+                        value={editSeriesDesc} onChange={(e) => setEditSeriesDesc(e.target.value)} rows={2}
+                        className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/60 resize-none"
+                      />
+                      <div className="flex gap-2">
+                        <button onClick={saveEditSeries} disabled={editSeriesSaving}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground text-xs font-bold rounded-lg disabled:opacity-40">
+                          <Save className="w-3.5 h-3.5" /> {editSeriesSaving ? "Saving…" : "Save"}
+                        </button>
+                        <button onClick={() => setEditSeriesId(null)} className="px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground border border-border rounded-lg">Cancel</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-start justify-between p-4 gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-bold text-foreground truncate">{s.title}</span>
+                          <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded-full border", s.is_published ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400" : "bg-muted/50 border-border text-muted-foreground")}>
+                            {s.is_published ? "Published" : "Draft"}
+                          </span>
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-primary flex items-center gap-1">
+                            <IndianRupee className="w-2.5 h-2.5" />{s.price_rupees === 0 ? "Free" : `₹${s.price_rupees}`}
+                          </span>
+                        </div>
+                        {s.description && <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{s.description}</p>}
+                        <p className="text-[11px] text-muted-foreground mt-1">{s.sub_test_count} sub-test{s.sub_test_count !== 1 ? "s" : ""} · Created {formatDate(s.created_at)}</p>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+                        <button onClick={() => togglePublish(s)}
+                          className={cn("text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition-all",
+                            s.is_published ? "border-rose-500/30 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" : "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20")}>
+                          {s.is_published ? "Unpublish" : "Publish"}
+                        </button>
+                        <button onClick={() => { setEditSeriesId(s.id); setEditSeriesTitle(s.title); setEditSeriesDesc(s.description); setEditSeriesPrice(s.price_rupees); }}
+                          className="text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-border bg-muted/30 text-muted-foreground hover:text-foreground transition-all">
+                          Edit
+                        </button>
+                        <button onClick={() => setSelectedSeriesId(selectedSeriesId === s.id ? null : s.id)}
+                          className={cn("text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition-all",
+                            selectedSeriesId === s.id ? "border-primary/40 bg-primary/10 text-primary" : "border-border bg-muted/30 text-muted-foreground hover:text-foreground")}>
+                          {selectedSeriesId === s.id ? "▲ Hide Tests" : "▼ Manage Tests"}
+                        </button>
+                        {seriesDeleteConfirm === s.id ? (
+                          <>
+                            <button onClick={() => deleteSeries(s.id)} className="text-[11px] font-bold px-2.5 py-1 rounded-lg border border-rose-500/50 bg-rose-500/20 text-rose-400">Confirm Delete</button>
+                            <button onClick={() => setSeriesDeleteConfirm(null)} className="text-[11px] px-2 py-1 text-muted-foreground hover:text-foreground">Cancel</button>
+                          </>
+                        ) : (
+                          <button onClick={() => setSeriesDeleteConfirm(s.id)} className="p-1.5 rounded-lg border border-border bg-muted/30 text-muted-foreground hover:text-rose-400 hover:border-rose-500/30 transition-all">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Sub-tests section */}
+                  {selectedSeriesId === s.id && (
+                    <div className="border-t border-border bg-muted/20 p-4 space-y-4">
+                      <h4 className="text-xs font-bold text-foreground uppercase tracking-wider">Sub-Tests ({seriesTests.length})</h4>
+
+                      {seriesTestsLoading ? (
+                        <div className="text-xs text-muted-foreground py-4 text-center">Loading…</div>
+                      ) : seriesTests.length === 0 ? (
+                        <div className="text-xs text-muted-foreground py-4 text-center">No sub-tests yet. Add one below.</div>
+                      ) : (
+                        <div className="space-y-2">
+                          {seriesTests.map((st, idx) => (
+                            <div key={st.id} className="bg-card border border-border rounded-lg p-3 flex items-start justify-between gap-3">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] font-bold text-muted-foreground bg-muted/50 rounded px-1.5 py-0.5">#{idx + 1}</span>
+                                  <span className="text-sm font-semibold text-foreground">{st.title}</span>
+                                </div>
+                                {st.description && <p className="text-xs text-muted-foreground mt-0.5">{st.description}</p>}
+                                <div className="flex flex-wrap gap-3 mt-1.5 text-[11px] text-muted-foreground">
+                                  <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{st.duration_minutes} min</span>
+                                  <span className="flex items-center gap-1"><Target className="w-3 h-3" />{st.total_marks} marks</span>
+                                  {st.topic_ids?.length > 0 && <span className="flex items-center gap-1"><BookOpen className="w-3 h-3" />{st.topic_ids.length} topic{st.topic_ids.length !== 1 ? "s" : ""}</span>}
+                                  {st.scheduled_at && <span className="flex items-center gap-1"><CalendarDays className="w-3 h-3" />{formatDate(st.scheduled_at)}</span>}
+                                </div>
+                                {st.topic_ids?.length > 0 && (
+                                  <div className="flex flex-wrap gap-1 mt-1.5">
+                                    {st.topic_ids.slice(0, 5).map((tid) => {
+                                      const t = seriesTopics.find((x) => x.id === tid);
+                                      return t ? <span key={tid} className="text-[10px] bg-primary/10 border border-primary/20 text-primary rounded px-1.5 py-0.5">{t.name}</span> : null;
+                                    })}
+                                    {st.topic_ids.length > 5 && <span className="text-[10px] text-muted-foreground">+{st.topic_ids.length - 5} more</span>}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="shrink-0">
+                                {stDeleteConfirm === st.id ? (
+                                  <div className="flex gap-1">
+                                    <button onClick={() => deleteSeriesTest(st.id)} className="text-[11px] font-bold px-2 py-1 rounded border border-rose-500/50 bg-rose-500/20 text-rose-400">Delete</button>
+                                    <button onClick={() => setStDeleteConfirm(null)} className="text-[11px] px-2 py-1 text-muted-foreground">Cancel</button>
+                                  </div>
+                                ) : (
+                                  <button onClick={() => setStDeleteConfirm(st.id)} className="p-1.5 rounded border border-border text-muted-foreground hover:text-rose-400 hover:border-rose-500/30 transition-all">
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Add Sub-test Form */}
+                      <div className="bg-card border border-border rounded-lg p-4 space-y-3">
+                        <h5 className="text-xs font-bold text-foreground flex items-center gap-1.5"><Plus className="w-3.5 h-3.5 text-primary" /> Add Sub-Test</h5>
+                        {stError && <p className="text-xs text-rose-400">{stError}</p>}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Sub-Test Title *</label>
+                            <input type="text" placeholder="e.g. Test 1 — Physics Mechanics"
+                              value={stTitle} onChange={(e) => setStTitle(e.target.value)}
+                              className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/60" />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Scheduled Date</label>
+                            <input type="date" value={stScheduled} onChange={(e) => setStScheduled(e.target.value)}
+                              className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/60" />
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Description</label>
+                          <input type="text" placeholder="Optional note about this test"
+                            value={stDesc} onChange={(e) => setStDesc(e.target.value)}
+                            className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/60" />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Duration (min)</label>
+                            <input type="number" min={5} max={300} value={stDuration} onChange={(e) => setStDuration(Math.max(5, Number(e.target.value)))}
+                              className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/60" />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Total Marks</label>
+                            <input type="number" min={1} value={stMarks} onChange={(e) => setStMarks(Math.max(1, Number(e.target.value)))}
+                              className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/60" />
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Syllabus Topics</label>
+                          <div className="bg-muted/30 border border-border rounded-lg p-2 max-h-48 overflow-y-auto space-y-0.5">
+                            {seriesTopics.length === 0 ? (
+                              <p className="text-xs text-muted-foreground p-2">Loading topics…</p>
+                            ) : (
+                              (() => {
+                                const groups: Record<string, TopicOption[]> = {};
+                                for (const t of seriesTopics) { const k = t.subject ?? "physics"; (groups[k] ??= []).push(t); }
+                                const order = ["physics", "chemistry", "biology"];
+                                const keys = [...order.filter((k) => groups[k]), ...Object.keys(groups).filter((k) => !order.includes(k))];
+                                return keys.map((key) => (
+                                  <div key={key}>
+                                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest px-2 py-1 sticky top-0 bg-muted/80">{SUBJECT_GROUP_LABEL[key] ?? key}</p>
+                                    {groups[key].map((t) => (
+                                      <label key={t.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-muted/50 cursor-pointer">
+                                        <input type="checkbox" checked={stTopicIds.includes(t.id)}
+                                          onChange={(e) => setStTopicIds((prev) => e.target.checked ? [...prev, t.id] : prev.filter((x) => x !== t.id))}
+                                          className="accent-primary w-3.5 h-3.5 shrink-0" />
+                                        <span className="text-xs text-foreground">{t.name}</span>
+                                      </label>
+                                    ))}
+                                  </div>
+                                ));
+                              })()
+                            )}
+                          </div>
+                          {stTopicIds.length > 0 && (
+                            <p className="text-[11px] text-primary">{stTopicIds.length} topic{stTopicIds.length !== 1 ? "s" : ""} selected</p>
+                          )}
+                        </div>
+                        <button onClick={addSeriesTest} disabled={stCreating || !stTitle.trim()}
+                          className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground text-xs font-bold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40">
+                          <Plus className="w-3.5 h-3.5" />
+                          {stCreating ? "Adding…" : "Add Sub-Test"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
         )}

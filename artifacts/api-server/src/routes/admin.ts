@@ -422,6 +422,126 @@ router.put("/admin/students/:id/course-type", async (req, res) => {
   res.json(updated);
 });
 
+// ── Test Series ───────────────────────────────────────────────────────────────
+
+router.get("/admin/test-series", async (_req, res) => {
+  const result = await db.execute(sql`
+    SELECT ts.*, COUNT(st.id)::int AS sub_test_count
+    FROM test_series ts
+    LEFT JOIN series_tests st ON st.series_id = ts.id
+    GROUP BY ts.id
+    ORDER BY ts.created_at DESC
+  `);
+  res.json(result.rows);
+});
+
+router.post("/admin/test-series", async (req, res) => {
+  const { title, description, priceRupees } = req.body as { title?: string; description?: string; priceRupees?: number };
+  if (!title || typeof title !== "string" || !title.trim()) {
+    return res.status(400).json({ error: "title required" });
+  }
+  const result = await db.execute(sql`
+    INSERT INTO test_series (title, description, price_rupees)
+    VALUES (${title.trim()}, ${description?.trim() ?? ""}, ${priceRupees ?? 0})
+    RETURNING *
+  `);
+  res.json(result.rows[0]);
+});
+
+router.put("/admin/test-series/:id", async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) return res.status(400).json({ error: "invalid id" });
+  const { title, description, priceRupees, isPublished } = req.body as {
+    title?: string; description?: string; priceRupees?: number; isPublished?: boolean;
+  };
+  const result = await db.execute(sql`
+    UPDATE test_series
+    SET
+      title = COALESCE(${title?.trim() ?? null}, title),
+      description = COALESCE(${description?.trim() ?? null}, description),
+      price_rupees = COALESCE(${priceRupees ?? null}, price_rupees),
+      is_published = COALESCE(${isPublished ?? null}, is_published)
+    WHERE id = ${id}
+    RETURNING *
+  `);
+  if (!result.rows[0]) return res.status(404).json({ error: "not found" });
+  res.json(result.rows[0]);
+});
+
+router.delete("/admin/test-series/:id", async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) return res.status(400).json({ error: "invalid id" });
+  await db.execute(sql`DELETE FROM test_series WHERE id = ${id}`);
+  res.json({ ok: true });
+});
+
+router.get("/admin/test-series/:id/tests", async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) return res.status(400).json({ error: "invalid id" });
+  const result = await db.execute(sql`
+    SELECT * FROM series_tests WHERE series_id = ${id} ORDER BY order_index, id
+  `);
+  res.json(result.rows);
+});
+
+router.post("/admin/test-series/:id/tests", async (req, res) => {
+  const seriesId = parseInt(req.params.id);
+  if (isNaN(seriesId)) return res.status(400).json({ error: "invalid id" });
+  const { title, description, topicIds, durationMinutes, totalMarks, scheduledAt } = req.body as {
+    title?: string; description?: string; topicIds?: number[];
+    durationMinutes?: number; totalMarks?: number; scheduledAt?: string;
+  };
+  if (!title || typeof title !== "string" || !title.trim()) {
+    return res.status(400).json({ error: "title required" });
+  }
+  const countResult = await db.execute(sql`SELECT COUNT(*)::int AS cnt FROM series_tests WHERE series_id = ${seriesId}`);
+  const orderIndex = (countResult.rows[0] as any).cnt ?? 0;
+  const tids = topicIds ?? [];
+  const tidsLiteral = tids.length > 0 ? `'{${tids.join(",")}}'::integer[]` : "ARRAY[]::integer[]";
+  const result = await db.execute(sql`
+    INSERT INTO series_tests (series_id, title, description, topic_ids, duration_minutes, total_marks, order_index, scheduled_at)
+    VALUES (
+      ${seriesId}, ${title.trim()}, ${description?.trim() ?? ""},
+      ${sql.raw(tidsLiteral)},
+      ${durationMinutes ?? 60}, ${totalMarks ?? 100}, ${orderIndex},
+      ${scheduledAt ? new Date(scheduledAt).toISOString() : null}
+    )
+    RETURNING *
+  `);
+  res.json(result.rows[0]);
+});
+
+router.put("/admin/test-series/:sid/tests/:tid", async (req, res) => {
+  const tid = parseInt(req.params.tid);
+  if (isNaN(tid)) return res.status(400).json({ error: "invalid id" });
+  const { title, description, topicIds, durationMinutes, totalMarks, scheduledAt } = req.body as {
+    title: string; description: string; topicIds: number[];
+    durationMinutes: number; totalMarks: number; scheduledAt?: string | null;
+  };
+  const tids = topicIds ?? [];
+  const tidsLiteral = tids.length > 0 ? `'{${tids.join(",")}}'::integer[]` : "ARRAY[]::integer[]";
+  const result = await db.execute(sql`
+    UPDATE series_tests SET
+      title = ${title},
+      description = ${description ?? ""},
+      topic_ids = ${sql.raw(tidsLiteral)},
+      duration_minutes = ${durationMinutes ?? 60},
+      total_marks = ${totalMarks ?? 100},
+      scheduled_at = ${scheduledAt ? new Date(scheduledAt).toISOString() : null}
+    WHERE id = ${tid}
+    RETURNING *
+  `);
+  if (!result.rows[0]) return res.status(404).json({ error: "not found" });
+  res.json(result.rows[0]);
+});
+
+router.delete("/admin/test-series/:sid/tests/:tid", async (req, res) => {
+  const tid = parseInt(req.params.tid);
+  if (isNaN(tid)) return res.status(400).json({ error: "invalid id" });
+  await db.execute(sql`DELETE FROM series_tests WHERE id = ${tid}`);
+  res.json({ ok: true });
+});
+
 // ── OpenAI API Key management ──────────────────────────────────────────────────
 
 router.get("/admin/settings/openai-key", async (_req, res) => {
