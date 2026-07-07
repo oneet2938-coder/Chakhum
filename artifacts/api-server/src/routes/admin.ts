@@ -542,6 +542,128 @@ router.delete("/admin/test-series/:sid/tests/:tid", async (req, res) => {
   res.json({ ok: true });
 });
 
+// ── Series-test question management ───────────────────────────────────────────
+
+router.get("/admin/series-tests/:stid/questions", async (req, res) => {
+  const stid = parseInt(req.params.stid);
+  if (isNaN(stid)) return res.status(400).json({ error: "invalid id" });
+  const result = await db.execute(sql`
+    SELECT stq.id AS stq_id, stq.order_index, q.id, q.text, q.options, q.correct_option, q.explanation, q.difficulty, q.year, q.image_b64,
+           t.name AS topic_name, t.subject
+    FROM series_test_questions stq
+    JOIN questions q ON q.id = stq.question_id
+    JOIN topics t ON t.id = q.topic_id
+    WHERE stq.series_test_id = ${stid}
+    ORDER BY stq.order_index, stq.id
+  `);
+  res.json(result.rows);
+});
+
+router.get("/admin/series-tests/:stid/questions/search", async (req, res) => {
+  const stid = parseInt(req.params.stid);
+  if (isNaN(stid)) return res.status(400).json({ error: "invalid id" });
+  const { topic, difficulty, q } = req.query as { topic?: string; difficulty?: string; q?: string };
+  const topicId = topic && topic !== "all" ? parseInt(topic) : null;
+  const diffFilter = difficulty && difficulty !== "all" ? difficulty : null;
+  const textFilter = q && q.trim() ? `%${q.trim()}%` : null;
+  const result = await db.execute(sql`
+    SELECT q.id, q.text, q.options, q.correct_option, q.explanation, q.difficulty, q.year, q.image_b64,
+           t.id AS topic_id, t.name AS topic_name, t.subject,
+           EXISTS(SELECT 1 FROM series_test_questions stq WHERE stq.series_test_id = ${stid} AND stq.question_id = q.id) AS already_added
+    FROM questions q
+    JOIN topics t ON t.id = q.topic_id
+    WHERE (${topicId}::int IS NULL OR q.topic_id = ${topicId}::int)
+      AND (${diffFilter} IS NULL OR q.difficulty = ${diffFilter})
+      AND (${textFilter} IS NULL OR q.text ILIKE ${textFilter ?? "%"})
+    ORDER BY t.subject, t.id, q.difficulty, q.id
+    LIMIT 80
+  `);
+  res.json(result.rows);
+});
+
+router.post("/admin/series-tests/:stid/questions", async (req, res) => {
+  const stid = parseInt(req.params.stid);
+  if (isNaN(stid)) return res.status(400).json({ error: "invalid id" });
+  const { questionId } = req.body as { questionId: number };
+  if (!questionId) return res.status(400).json({ error: "questionId required" });
+  const countRes = await db.execute(sql`SELECT COUNT(*)::int AS cnt FROM series_test_questions WHERE series_test_id = ${stid}`);
+  const orderIndex = (countRes.rows[0] as any).cnt ?? 0;
+  await db.execute(sql`
+    INSERT INTO series_test_questions (series_test_id, question_id, order_index)
+    VALUES (${stid}, ${questionId}, ${orderIndex})
+    ON CONFLICT (series_test_id, question_id) DO NOTHING
+  `);
+  res.json({ ok: true });
+});
+
+router.delete("/admin/series-tests/:stid/questions/:qid", async (req, res) => {
+  const stid = parseInt(req.params.stid);
+  const qid = parseInt(req.params.qid);
+  if (isNaN(stid) || isNaN(qid)) return res.status(400).json({ error: "invalid id" });
+  await db.execute(sql`DELETE FROM series_test_questions WHERE series_test_id = ${stid} AND question_id = ${qid}`);
+  res.json({ ok: true });
+});
+
+// ── Coupons ─────────────────────────────────────────────────────────────────
+
+router.get("/admin/coupons", async (_req, res) => {
+  const result = await db.execute(sql`
+    SELECT c.*, ts.title AS series_title
+    FROM coupons c
+    LEFT JOIN test_series ts ON ts.id = c.series_id
+    ORDER BY c.created_at DESC
+  `);
+  res.json(result.rows);
+});
+
+router.post("/admin/coupons", async (req, res) => {
+  const { code, discountType, discountValue, seriesId, maxUses, expiresAt } = req.body as {
+    code: string; discountType: string; discountValue: number;
+    seriesId?: number | null; maxUses?: number | null; expiresAt?: string | null;
+  };
+  if (!code || !code.trim()) return res.status(400).json({ error: "code required" });
+  const result = await db.execute(sql`
+    INSERT INTO coupons (code, discount_type, discount_value, series_id, max_uses, expires_at)
+    VALUES (
+      ${code.trim().toUpperCase()}, ${discountType ?? "percent"}, ${discountValue ?? 10},
+      ${seriesId ?? null}, ${maxUses ?? null},
+      ${expiresAt ? new Date(expiresAt).toISOString() : null}
+    )
+    RETURNING *
+  `);
+  res.json(result.rows[0]);
+});
+
+router.put("/admin/coupons/:id", async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) return res.status(400).json({ error: "invalid id" });
+  const { code, discountType, discountValue, seriesId, maxUses, expiresAt, isActive } = req.body as {
+    code: string; discountType: string; discountValue: number;
+    seriesId?: number | null; maxUses?: number | null; expiresAt?: string | null; isActive?: boolean;
+  };
+  const result = await db.execute(sql`
+    UPDATE coupons SET
+      code = ${code?.trim().toUpperCase() ?? ""},
+      discount_type = ${discountType ?? "percent"},
+      discount_value = ${discountValue ?? 10},
+      series_id = ${seriesId ?? null},
+      max_uses = ${maxUses ?? null},
+      expires_at = ${expiresAt ? new Date(expiresAt).toISOString() : null},
+      is_active = ${isActive ?? true}
+    WHERE id = ${id}
+    RETURNING *
+  `);
+  if (!result.rows[0]) return res.status(404).json({ error: "not found" });
+  res.json(result.rows[0]);
+});
+
+router.delete("/admin/coupons/:id", async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) return res.status(400).json({ error: "invalid id" });
+  await db.execute(sql`DELETE FROM coupons WHERE id = ${id}`);
+  res.json({ ok: true });
+});
+
 // ── OpenAI API Key management ──────────────────────────────────────────────────
 
 router.get("/admin/settings/openai-key", async (_req, res) => {

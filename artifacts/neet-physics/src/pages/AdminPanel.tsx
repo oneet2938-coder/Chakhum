@@ -98,7 +98,7 @@ interface PendingStudent {
   createdAt: string;
 }
 
-type Tab = "approvals" | "daily" | "students" | "overview" | "leaderboard" | "topstudents" | "dailypractice" | "aitools" | "tests" | "testseries" | "apisettings";
+type Tab = "approvals" | "daily" | "students" | "overview" | "leaderboard" | "topstudents" | "dailypractice" | "aitools" | "tests" | "testseries" | "coupons" | "apisettings";
 
 interface TestSeriesItem {
   id: number; title: string; description: string;
@@ -109,6 +109,24 @@ interface SeriesTestItem {
   id: number; series_id: number; title: string; description: string;
   topic_ids: number[]; duration_minutes: number; total_marks: number;
   order_index: number; scheduled_at: string | null;
+  question_count?: number;
+}
+interface SeriesTestQuestion {
+  stq_id: number; order_index: number;
+  id: number; text: string; options: string[]; correct_option: number;
+  explanation: string; difficulty: string; year: number | null; image_b64: string | null;
+  topic_name: string; subject: string;
+}
+interface QuestionBankItem {
+  id: number; text: string; options: string[]; correct_option: number;
+  explanation: string; difficulty: string; year: number | null; image_b64: string | null;
+  topic_id: number; topic_name: string; subject: string; already_added: boolean;
+}
+interface CouponItem {
+  id: number; code: string; discount_type: string; discount_value: number;
+  series_id: number | null; series_title: string | null;
+  max_uses: number | null; uses_count: number;
+  expires_at: string | null; is_active: boolean; created_at: string;
 }
 
 interface GeneratedMCQ {
@@ -429,6 +447,31 @@ export default function AdminPanel() {
   const [editSeriesDesc, setEditSeriesDesc] = useState("");
   const [editSeriesPrice, setEditSeriesPrice] = useState(0);
   const [editSeriesSaving, setEditSeriesSaving] = useState(false);
+  // Question manager overlay
+  const [stqOpenId, setStqOpenId] = useState<number | null>(null);
+  const [stqOpenTitle, setStqOpenTitle] = useState("");
+  const [stqList, setStqList] = useState<SeriesTestQuestion[]>([]);
+  const [stqListLoading, setStqListLoading] = useState(false);
+  const [stqSearchText, setStqSearchText] = useState("");
+  const [stqTopicFilter, setStqTopicFilter] = useState("all");
+  const [stqDiffFilter, setStqDiffFilter] = useState("all");
+  const [stqResults, setStqResults] = useState<QuestionBankItem[]>([]);
+  const [stqSearching, setStqSearching] = useState(false);
+  const [stqAdding, setStqAdding] = useState<number | null>(null);
+  const [stqRemoving, setStqRemoving] = useState<number | null>(null);
+  // Coupons tab
+  const [coupons, setCoupons] = useState<CouponItem[]>([]);
+  const [couponsLoading, setCouponsLoading] = useState(false);
+  const [newCouponCode, setNewCouponCode] = useState("");
+  const [newCouponType, setNewCouponType] = useState<"percent" | "flat">("percent");
+  const [newCouponValue, setNewCouponValue] = useState(10);
+  const [newCouponSeries, setNewCouponSeries] = useState<number | "">("");
+  const [newCouponMaxUses, setNewCouponMaxUses] = useState<number | "">("");
+  const [newCouponExpiry, setNewCouponExpiry] = useState("");
+  const [couponCreating, setCouponCreating] = useState(false);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [couponDeleteConfirm, setCouponDeleteConfirm] = useState<number | null>(null);
+  const [editCouponId, setEditCouponId] = useState<number | null>(null);
 
   const fetchSeriesList = useCallback(async () => {
     setSeriesLoading(true);
@@ -444,6 +487,31 @@ export default function AdminPanel() {
     setSeriesTestsLoading(false);
   }, []);
 
+  const fetchStqList = useCallback(async (stid: number) => {
+    setStqListLoading(true);
+    const data = await fetch(`/api/admin/series-tests/${stid}/questions`).then((r) => r.json());
+    setStqList(Array.isArray(data) ? data : []);
+    setStqListLoading(false);
+  }, []);
+
+  const searchStqQuestions = useCallback(async (stid: number, text: string, topic: string, diff: string) => {
+    setStqSearching(true);
+    const params = new URLSearchParams();
+    if (topic !== "all") params.set("topic", topic);
+    if (diff !== "all") params.set("difficulty", diff);
+    if (text.trim()) params.set("q", text.trim());
+    const data = await fetch(`/api/admin/series-tests/${stid}/questions/search?${params}`).then((r) => r.json());
+    setStqResults(Array.isArray(data) ? data : []);
+    setStqSearching(false);
+  }, []);
+
+  const fetchCoupons = useCallback(async () => {
+    setCouponsLoading(true);
+    const data = await fetch("/api/admin/coupons").then((r) => r.json());
+    setCoupons(Array.isArray(data) ? data : []);
+    setCouponsLoading(false);
+  }, []);
+
   useEffect(() => {
     if (tab !== "testseries") return;
     fetchSeriesList();
@@ -451,9 +519,27 @@ export default function AdminPanel() {
   }, [tab, fetchSeriesList]);
 
   useEffect(() => {
+    if (tab === "coupons") { fetchCoupons(); fetchSeriesList(); }
+  }, [tab, fetchCoupons, fetchSeriesList]);
+
+  useEffect(() => {
     if (selectedSeriesId !== null) fetchSeriesTests(selectedSeriesId);
     else setSeriesTests([]);
   }, [selectedSeriesId, fetchSeriesTests]);
+
+  useEffect(() => {
+    if (stqOpenId !== null) {
+      fetchStqList(stqOpenId);
+      searchStqQuestions(stqOpenId, stqSearchText, stqTopicFilter, stqDiffFilter);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stqOpenId]);
+
+  useEffect(() => {
+    if (stqOpenId === null) return;
+    const timer = setTimeout(() => searchStqQuestions(stqOpenId, stqSearchText, stqTopicFilter, stqDiffFilter), 350);
+    return () => clearTimeout(timer);
+  }, [stqSearchText, stqTopicFilter, stqDiffFilter, stqOpenId, searchStqQuestions]);
 
   async function createSeries() {
     if (!newSeriesTitle.trim()) { setSeriesError("Title required"); return; }
@@ -519,6 +605,60 @@ export default function AdminPanel() {
     await fetch(`/api/admin/test-series/${selectedSeriesId}/tests/${tid}`, { method: "DELETE" });
     setStDeleteConfirm(null);
     await fetchSeriesTests(selectedSeriesId);
+  }
+
+  async function addStqQuestion(qid: number) {
+    if (stqOpenId === null) return;
+    setStqAdding(qid);
+    await fetch(`/api/admin/series-tests/${stqOpenId}/questions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ questionId: qid }),
+    });
+    await fetchStqList(stqOpenId);
+    setStqResults((prev) => prev.map((q) => q.id === qid ? { ...q, already_added: true } : q));
+    setStqAdding(null);
+  }
+
+  async function removeStqQuestion(qid: number) {
+    if (stqOpenId === null) return;
+    setStqRemoving(qid);
+    await fetch(`/api/admin/series-tests/${stqOpenId}/questions/${qid}`, { method: "DELETE" });
+    setStqList((prev) => prev.filter((q) => q.id !== qid));
+    setStqResults((prev) => prev.map((q) => q.id === qid ? { ...q, already_added: false } : q));
+    setStqRemoving(null);
+  }
+
+  async function createCoupon() {
+    if (!newCouponCode.trim()) { setCouponError("Code required"); return; }
+    setCouponCreating(true); setCouponError(null);
+    const res = await fetch("/api/admin/coupons", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        code: newCouponCode, discountType: newCouponType, discountValue: newCouponValue,
+        seriesId: newCouponSeries || null, maxUses: newCouponMaxUses || null,
+        expiresAt: newCouponExpiry || null,
+      }),
+    });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); setCouponError(e.error ?? "Failed"); }
+    else { setNewCouponCode(""); setNewCouponValue(10); setNewCouponSeries(""); setNewCouponMaxUses(""); setNewCouponExpiry(""); await fetchCoupons(); }
+    setCouponCreating(false);
+  }
+
+  async function toggleCoupon(c: CouponItem) {
+    await fetch(`/api/admin/coupons/${c.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...c, isActive: !c.is_active }),
+    });
+    await fetchCoupons();
+  }
+
+  async function deleteCoupon(id: number) {
+    await fetch(`/api/admin/coupons/${id}`, { method: "DELETE" });
+    setCouponDeleteConfirm(null);
+    await fetchCoupons();
   }
 
   const fetchApprovals = useCallback(async () => {
@@ -1127,7 +1267,7 @@ export default function AdminPanel() {
 
         {/* ── Tabs ── */}
         <div className="flex gap-1 bg-muted/40 border border-border rounded-lg p-1 w-fit flex-wrap">
-          {([ ["approvals", "✅ Approvals"], ["daily", "Daily Report"], ["students", "All Students"], ["overview", "Overview"], ["leaderboard", "💎 Leaderboard"], ["topstudents", "🏅 Top Students"], ["tests", "📝 Tests"], ["testseries", "📋 Test Series"], ["dailypractice", "📅 Daily Practice"], ["aitools", "🤖 AI Tools"], ["apisettings", "🔑 API Key"] ] as [Tab, string][]).map(([id, label]) => (
+          {([ ["approvals", "✅ Approvals"], ["daily", "Daily Report"], ["students", "All Students"], ["overview", "Overview"], ["leaderboard", "💎 Leaderboard"], ["topstudents", "🏅 Top Students"], ["tests", "📝 Tests"], ["testseries", "📋 Test Series"], ["coupons", "🎟️ Coupons"], ["dailypractice", "📅 Daily Practice"], ["aitools", "🤖 AI Tools"], ["apisettings", "🔑 API Key"] ] as [Tab, string][]).map(([id, label]) => (
             <button
               key={id}
               onClick={() => { setTab(id); if (id === "apisettings") fetchKeyStatus(); }}
@@ -3555,7 +3695,12 @@ export default function AdminPanel() {
                                   </div>
                                 )}
                               </div>
-                              <div className="shrink-0">
+                              <div className="shrink-0 flex flex-col gap-1">
+                                <button
+                                  onClick={() => { setStqOpenId(st.id); setStqOpenTitle(st.title); setStqSearchText(""); setStqTopicFilter("all"); setStqDiffFilter("all"); setStqResults([]); }}
+                                  className="text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-all flex items-center gap-1">
+                                  <BookOpen className="w-3 h-3" /> Questions {st.question_count !== undefined ? `(${st.question_count})` : ""}
+                                </button>
                                 {stDeleteConfirm === st.id ? (
                                   <div className="flex gap-1">
                                     <button onClick={() => deleteSeriesTest(st.id)} className="text-[11px] font-bold px-2 py-1 rounded border border-rose-500/50 bg-rose-500/20 text-rose-400">Delete</button>
@@ -3652,7 +3797,238 @@ export default function AdminPanel() {
           </div>
         )}
 
+        {/* ── Coupons tab ── */}
+        {tab === "coupons" && (
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-base font-bold text-foreground">Discount Coupons</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">Create coupon codes for discounts on test series access fees.</p>
+            </div>
+
+            {/* Create coupon form */}
+            <div className="bg-card border border-border rounded-xl p-5 space-y-4">
+              <h4 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5"><Plus className="w-3.5 h-3.5 text-primary" /> New Coupon</h4>
+              {couponError && <p className="text-xs text-rose-400">{couponError}</p>}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Coupon Code *</label>
+                  <input type="text" placeholder="e.g. NEET2027" value={newCouponCode}
+                    onChange={(e) => setNewCouponCode(e.target.value.toUpperCase())}
+                    className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm font-mono text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/60" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Series (optional)</label>
+                  <select value={newCouponSeries} onChange={(e) => setNewCouponSeries(e.target.value ? Number(e.target.value) : "")}
+                    className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/60">
+                    <option value="">All series</option>
+                    {seriesList.map((s) => <option key={s.id} value={s.id}>{s.title}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Discount Type</label>
+                  <select value={newCouponType} onChange={(e) => setNewCouponType(e.target.value as "percent" | "flat")}
+                    className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/60">
+                    <option value="percent">Percent (%)</option>
+                    <option value="flat">Flat (₹)</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Value</label>
+                  <input type="number" min={1} value={newCouponValue} onChange={(e) => setNewCouponValue(Math.max(1, Number(e.target.value)))}
+                    className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/60" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Max Uses</label>
+                  <input type="number" min={1} placeholder="∞ unlimited" value={newCouponMaxUses}
+                    onChange={(e) => setNewCouponMaxUses(e.target.value ? Number(e.target.value) : "")}
+                    className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60" />
+                </div>
+              </div>
+              <div className="space-y-1 max-w-xs">
+                <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Expiry Date (optional)</label>
+                <input type="date" value={newCouponExpiry} onChange={(e) => setNewCouponExpiry(e.target.value)}
+                  className="w-full bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/60" />
+              </div>
+              <button onClick={createCoupon} disabled={couponCreating || !newCouponCode.trim()}
+                className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground text-xs font-bold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40">
+                <Plus className="w-3.5 h-3.5" />{couponCreating ? "Creating…" : "Create Coupon"}
+              </button>
+            </div>
+
+            {/* Coupon list */}
+            {couponsLoading ? (
+              <div className="text-xs text-muted-foreground py-6 text-center">Loading…</div>
+            ) : coupons.length === 0 ? (
+              <div className="text-xs text-muted-foreground py-6 text-center">No coupons yet.</div>
+            ) : (
+              <div className="space-y-2">
+                {coupons.map((c) => (
+                  <div key={c.id} className={cn("bg-card border rounded-xl p-4 flex items-center justify-between gap-4 flex-wrap", c.is_active ? "border-border" : "border-border/40 opacity-60")}>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-mono text-sm font-bold text-foreground bg-muted/60 px-2 py-0.5 rounded tracking-widest">{c.code}</span>
+                        <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded-full border", c.discount_type === "percent" ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" : "bg-amber-500/10 border-amber-500/20 text-amber-400")}>
+                          {c.discount_type === "percent" ? `${c.discount_value}% off` : `₹${c.discount_value} off`}
+                        </span>
+                        <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded-full border", c.is_active ? "bg-primary/10 border-primary/20 text-primary" : "bg-muted/40 border-border text-muted-foreground")}>
+                          {c.is_active ? "Active" : "Inactive"}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-3 mt-1.5 text-[11px] text-muted-foreground">
+                        {c.series_title && <span>Series: <span className="text-foreground">{c.series_title}</span></span>}
+                        {!c.series_title && <span>All series</span>}
+                        <span>Uses: <span className="text-foreground">{c.uses_count}{c.max_uses ? `/${c.max_uses}` : ""}</span></span>
+                        {c.expires_at && <span>Expires: <span className="text-foreground">{formatDate(c.expires_at)}</span></span>}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button onClick={() => toggleCoupon(c)}
+                        className={cn("text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition-all",
+                          c.is_active ? "border-muted-foreground/30 bg-muted/30 text-muted-foreground hover:text-foreground" : "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20")}>
+                        {c.is_active ? "Deactivate" : "Activate"}
+                      </button>
+                      {couponDeleteConfirm === c.id ? (
+                        <>
+                          <button onClick={() => deleteCoupon(c.id)} className="text-[11px] font-bold px-2.5 py-1 rounded-lg border border-rose-500/50 bg-rose-500/20 text-rose-400">Confirm</button>
+                          <button onClick={() => setCouponDeleteConfirm(null)} className="text-[11px] px-2 py-1 text-muted-foreground hover:text-foreground">Cancel</button>
+                        </>
+                      ) : (
+                        <button onClick={() => setCouponDeleteConfirm(c.id)} className="p-1.5 rounded-lg border border-border bg-muted/30 text-muted-foreground hover:text-rose-400 hover:border-rose-500/30 transition-all">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
       </div>
+
+      {/* ── Question Manager Overlay ── */}
+      {stqOpenId !== null && (
+        <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm flex flex-col overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-card shrink-0">
+            <div>
+              <h2 className="text-base font-bold text-foreground">Question Manager</h2>
+              <p className="text-xs text-muted-foreground mt-0.5 truncate max-w-sm">{stqOpenTitle}</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-semibold text-primary">{stqList.length} question{stqList.length !== 1 ? "s" : ""} in test</span>
+              <button onClick={() => { setStqOpenId(null); if (selectedSeriesId) fetchSeriesTests(selectedSeriesId); }}
+                className="p-2 rounded-lg border border-border bg-muted/30 text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all">
+                ✕
+              </button>
+            </div>
+          </div>
+
+          {/* Two-panel layout */}
+          <div className="flex flex-1 overflow-hidden min-h-0">
+
+            {/* LEFT: Questions in this test */}
+            <div className="w-80 shrink-0 border-r border-border flex flex-col overflow-hidden bg-muted/10">
+              <div className="px-4 py-3 border-b border-border shrink-0">
+                <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">In This Test ({stqList.length})</p>
+              </div>
+              <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                {stqListLoading ? (
+                  <p className="text-xs text-muted-foreground text-center py-4">Loading…</p>
+                ) : stqList.length === 0 ? (
+                  <p className="text-xs text-muted-foreground text-center py-8">No questions yet.<br/>Add from the right panel.</p>
+                ) : stqList.map((q, i) => (
+                  <div key={q.id} className="bg-card border border-border rounded-lg p-3 group">
+                    <div className="flex items-start gap-2">
+                      <span className="text-[10px] font-bold text-muted-foreground bg-muted/60 rounded px-1.5 py-0.5 shrink-0 mt-0.5">Q{i + 1}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-foreground line-clamp-2">{q.text}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className={cn("text-[10px] font-semibold", q.difficulty === "easy" ? "text-emerald-400" : q.difficulty === "hard" ? "text-rose-400" : "text-amber-400")}>{q.difficulty}</span>
+                          <span className="text-[10px] text-muted-foreground">{q.topic_name}</span>
+                        </div>
+                      </div>
+                      <button onClick={() => removeStqQuestion(q.id)} disabled={stqRemoving === q.id}
+                        className="p-1 rounded text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 transition-all opacity-0 group-hover:opacity-100 shrink-0 disabled:opacity-40">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* RIGHT: Question bank search */}
+            <div className="flex-1 flex flex-col overflow-hidden">
+              {/* Search filters */}
+              <div className="px-4 py-3 border-b border-border bg-muted/5 shrink-0 space-y-2">
+                <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Question Bank</p>
+                <div className="flex flex-wrap gap-2">
+                  <input type="text" placeholder="Search by keyword…" value={stqSearchText}
+                    onChange={(e) => setStqSearchText(e.target.value)}
+                    className="flex-1 min-w-48 bg-muted/40 border border-border rounded-lg px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/60" />
+                  <select value={stqTopicFilter} onChange={(e) => setStqTopicFilter(e.target.value)}
+                    className="bg-muted/40 border border-border rounded-lg px-3 py-1.5 text-xs text-foreground focus:outline-none focus:border-primary/60">
+                    <option value="all">All Topics</option>
+                    {(() => {
+                      const groups: Record<string, TopicOption[]> = {};
+                      for (const t of seriesTopics) { const k = t.subject ?? "physics"; (groups[k] ??= []).push(t); }
+                      const order = ["physics", "chemistry", "biology"];
+                      const keys = [...order.filter((k) => groups[k]), ...Object.keys(groups).filter((k) => !order.includes(k))];
+                      return keys.map((key) => (
+                        <optgroup key={key} label={SUBJECT_GROUP_LABEL[key] ?? key}>
+                          {groups[key].map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                        </optgroup>
+                      ));
+                    })()}
+                  </select>
+                  <select value={stqDiffFilter} onChange={(e) => setStqDiffFilter(e.target.value)}
+                    className="bg-muted/40 border border-border rounded-lg px-3 py-1.5 text-xs text-foreground focus:outline-none focus:border-primary/60">
+                    <option value="all">All Difficulties</option>
+                    <option value="easy">Easy</option>
+                    <option value="medium">Medium</option>
+                    <option value="hard">Hard</option>
+                  </select>
+                </div>
+                {stqSearching && <p className="text-[11px] text-muted-foreground">Searching…</p>}
+              </div>
+
+              {/* Search results */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                {stqResults.length === 0 && !stqSearching && (
+                  <p className="text-xs text-muted-foreground text-center py-8">No questions found. Try adjusting the filters.</p>
+                )}
+                {stqResults.map((q) => (
+                  <div key={q.id} className={cn("bg-card border rounded-lg p-3 flex gap-3 items-start transition-all", q.already_added ? "border-primary/30 bg-primary/5" : "border-border hover:border-border/80")}>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-foreground line-clamp-3">{q.text}</p>
+                      {q.image_b64 && <p className="text-[10px] text-muted-foreground mt-0.5">📷 has image</p>}
+                      <div className="flex items-center gap-2 mt-1.5">
+                        <span className={cn("text-[10px] font-bold", q.difficulty === "easy" ? "text-emerald-400" : q.difficulty === "hard" ? "text-rose-400" : "text-amber-400")}>{q.difficulty}</span>
+                        <span className="text-[10px] text-muted-foreground">{q.topic_name}</span>
+                        <span className="text-[10px] text-muted-foreground capitalize">{q.subject}</span>
+                        {q.year && <span className="text-[10px] text-muted-foreground">NEET {q.year}</span>}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => q.already_added ? removeStqQuestion(q.id) : addStqQuestion(q.id)}
+                      disabled={stqAdding === q.id || stqRemoving === q.id}
+                      className={cn("shrink-0 text-[11px] font-bold px-3 py-1.5 rounded-lg border transition-all disabled:opacity-40",
+                        q.already_added
+                          ? "border-rose-500/40 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20"
+                          : "border-primary/40 bg-primary/10 text-primary hover:bg-primary/20")}>
+                      {(stqAdding === q.id || stqRemoving === q.id) ? "…" : q.already_added ? "Remove" : "+ Add"}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

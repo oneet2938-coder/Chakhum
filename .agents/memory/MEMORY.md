@@ -1,0 +1,1 @@
+- [Drizzle raw SQL array params](drizzle-array-sql.md) — JS arrays in drizzle sql`` expand as multi-param tuples; use sql.raw with PostgreSQL literal `'{1,2,3}'::integer[]` instead.
